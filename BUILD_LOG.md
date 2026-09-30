@@ -382,3 +382,83 @@ cover the changes.
 Named gaps from L9: the T13 falsifier judge was not blind (the frozen rubric states the expected score); the T8 round 3
 judge cited five frames without opening them; the judged videos were rendered before the L10 render change.
 L9: T7, T8, T9, T10, T11, T12 PASS; T13 BLOCKED.
+
+## L10: the owner's newest code, retests and the final report
+
+Branch check at L10: `claude/clever-lamport-n7of0u` moved from 3543ba7 to 7ba5f25 (three media commits). Skill changes
+in them: `studio render` takes the final audio from the lossless mix with a limiter at 4x oversampling, and a
+troubleshooting row. Both adopted: `lib/render.mjs` keeps our measured two pass loudnorm and adds the mix and the limiter.
+First attempt FAIL (evidence L10-render-2026-09-30-1): `audio against mix: ... the sound in the video ends 0.07 s before the
+picture does`, because loudnorm shifts timestamps and the trim came after it; the trim now comes first in the chain.
+
+T6 then failed on the committed render as well as the new one (`hydration-tips rendered twice: frames at 1, 14.114,
+27.227 s: DIFFERENT, DIFFERENT, identical`). Cause: HyperFrames keeps a hidden per install breaker
+(`deParallelRouterTrialFired` in its config) that switches parallel drawElement capture off for good after one render falls
+back; its screenshot capture then differs between renders (mean 0.05 of 255 on moving edges). `hf()` now keeps
+`HF_DE_PARALLEL_ROUTER=true` unless the user set it; a page that cannot be routed still falls back for that render only.
+Final code, literal (evidence L10-render-2026-09-30-3, L10-final-2026-09-30-1):
+```
+PASS  sketch page rendered twice (rng 1): frames at 1, 1.5, 2 s: identical, identical, identical
+PASS  falsifier: the sketch page with rng 2: 3 of 3 frames differ from the rng 1 render (at least 1 required)
+PASS  hydration-tips rendered twice: frames at 1, 14.114, 27.227 s: identical, identical, identical
+ℹ tests 160   ℹ pass 160   ℹ fail 0                       (node --test test/*.test.mjs)
+125 passed in 32.90s                                         (pytest tests)
+PASS  hydration-tips / three-product / footage-captions check: 0 failing, exit 0; PASS falsifier   (T5)
+T15 PASS: 20 MCP calls; check: true peak -3 dBTP, audio against mix lag 0 ms, correlation 0.987
+81 items: 81 PASS, 0 FAIL                                    (T0 with the tools list)
+Manifest schema validation passes!  smoke test: the unpacked server answered initialize and lists 36 tools
+size: 258148 bytes, 86 files                                 (T17)
+```
+
+## Final report
+
+Workers and models: orchestrator Opus 5.5 (plan, ledger, every test run and all evidence, the T13 look changes, the L10
+render port); research workers, breakdown workers, implementers A to G, writer H, the NOTICE writer, the fresh readers and
+the behaviour verifiers were sonnet; every judge was a fresh sonnet worker; the headless builds of T7 to T12, T16 and T16b
+used sonnet, and the third rounds of T7 and T8 used opus.
+
+| Test | Result | Literal proof (evidence in the ledger) |
+|---|---|---|
+| T0 | PASS | `110 items: 110 PASS, 0 FAIL` (owner's text at 3543ba7); `81 items: 81 PASS, 0 FAIL` (adopted text with the tools list); falsifier `fails on studio fly` |
+| T1 | PASS | `PASS runtime node: v22.23.3`, `PASS uv: 0.12.21`, `PASS python and kokoro: Python 3.11.16 kokoro-onnx 0.6.1`, `PASS model hashes: kokoro-v1.0.int8.onnx 6e742170d309`; ffprobe falsifier exit 2 |
+| T2 | PASS | `ℹ tests 29 ℹ pass 29 ℹ fail 0` (one fixture per page rule, each refused with its own message) |
+| T3 | PASS | `transcript.json written (31 words)`; empty WAV exit 1 with a plain message |
+| T4 | PASS | `PASS  median onset error: 4 ms (need at most 80 ms)`, `PASS  95th percentile onset error: 6 ms (need at most 200 ms); 0 word(s) missing` (attempt 1 FAIL at 345 ms) |
+| T5 | PASS | `PASS  hydration-tips check: 9 lines, 0 failing, exit 0` and the same for three-product and footage-captions; `PASS  falsifier compose fails` |
+| T6 | PASS | `PASS  hydration-tips rendered twice: frames at 1, 14.114, 27.227 s: identical, identical, identical`; rng 2 falsifier differs 3 of 3 |
+| T7 | PASS | 11 check lines PASS, `captions: 87 transcript words all in out/captions.json`, coverage 93.0%, band 19.33; judge round 3 `VERDICT: PASS` |
+| T7s | PASS | `PASS  synctest: every flash and beep within one frame (33.3 ms), mean offset 0 ms`; falsifier exit 2; `warning: ... the audio starts 0.176 s after the picture` |
+| T8 | PASS | 11 check lines PASS, coverage 98.6%; judge round 3 `VERDICT: PASS`; crop_x 0 falsifier `VERDICT: TEXT CUT OFF` |
+| T9 | PASS | 10 check lines PASS, exit=0; judge PASS |
+| T10 | PASS | check PASS at 60 fps; `converted copy: check exit 2; frame rate: FAIL 30 fps (project fps 60)`; rubric overall 5, no copied text TRUE |
+| T11 | PASS | rubric line 4, paper 5, palette 5, lettering 5, devices 5, draw on 5, overall 5; original TRUE |
+| T12 | PASS | 10 check lines PASS; rubric overall 4; not a known character TRUE |
+| T13 | BLOCKED | round 3 palette/texture 5/5, 5/4, 5/4, 5/3, 5/4: doodle-timeline texture 3 |
+| T14 | PASS | `✔ studio_guide equals SKILL.md with the skill folder resolved`, `ℹ tests 16 ℹ pass 16 ℹ fail 0` |
+| T15 | PASS | `T15 PASS: 20 MCP calls`, every check line PASS |
+| T16 | PASS | calls to Bash, Edit or Write: `0`; check 10 lines PASS; falsifier with the plugin disabled: `synergy tools 0`, no MP4 |
+| T16b | PASS | calls to Bash, Edit or Write: `0`; `PASS  captions: 31 transcript words all in out/captions.json`, exit=0 |
+| T17 | PASS | `Manifest schema validation passes!`, `lists 36 tools`, `size: 258148 bytes, 86 files` |
+| T18 | PENDING | James's test in Claude Desktop |
+
+The lite gate is met except T13 and T18, which await James's written acceptance:
+- T13, BLOCKED after three judged rounds. What would close it: one round in which all five look cards score 4 or more
+  on palette and texture (the last round failed only on doodle-timeline texture 3). Who: James may accept it as is or allow
+  a fourth round.
+- T18, PENDING. What would close it: James installs `dist/synergy-studio.mcpb` in Claude Desktop, follows README "Owner's
+  test in Claude Desktop" and reports that both MP4s play. Who: James.
+
+Not checked: Windows and Linux; rendering with the network off; voices other than the ten listed; videos longer than 90 s;
+the README's GitHub install line before the push (it is run after the push and reported in the last message); the judged
+videos of T7 to T12, T16 and T16b were rendered before the L10 render change and not rendered again (T5, T6 and T15 prove
+the new render); determinism of a page HyperFrames cannot route to parallel capture (screenshot capture differed between
+renders of hydration-tips); captions on continuous speech have no ground truth (T4 uses isolated words, and its snapping
+was developed with that fixture in view); the T13 falsifier judge was not blind; the T8 round 3 judge cited five frames
+without opening them; c4 has captions burned in; after L10 the audio runs about 0.07 s past the picture (inside the 0.15 s
+tolerance).
+
+**Largest gap:** the judged tests rest on stills read by a model, not on a person watching the videos: T7 to T13 passed or
+failed on a sonnet judge's reading of contact sheets, and T18, the only test where James watches the result in Claude
+Desktop, has not run.
+
+Sizes: tool home 2.0 GB (`du -sh`); tracked files 2016 KB; `.git` 2.6 MB before the final commit.

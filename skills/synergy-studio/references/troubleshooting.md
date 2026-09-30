@@ -27,3 +27,4 @@
 | `studio_words` says "no timing.json yet" | words needs the scene timing | call `studio_audio` first, then `studio_words`, then set the events and call `studio_audio` again |
 | A deterministic "random" is needed (rain, stars) | `Math.random` changes every render | use a fixed hash: the fractional part of `Math.sin(i*127.1 + j*311.7)*43758.5453`, which is what `hash(i, j)` in the sketch kit returns (styles.md) |
 | Beat grid a few ms early | onset detection | `studio_beats` is accurate to about 10 ms (a third of a frame) and keeps a beat at 0 s; nudge events by hand only if a hit looks late |
+| `studio_check`: true peak above −1 dBTP (sharp pops, claps, clicks in the music) | AAC encoding overshoots transients | fixed in `studio_render`: the final audio comes from the lossless mix with a limiter at 4x oversampling; render again. Never encode the AAC track of an existing MP4 a second time (a second lossy pass raises the peaks) |

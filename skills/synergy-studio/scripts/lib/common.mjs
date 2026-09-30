@@ -34,7 +34,11 @@ export function run(cmd, args, opts = {}) {
 export const which = cmd => { const r = spawnSync(WIN ? "where" : "which", [cmd], { encoding: "utf8" }); return r.status === 0 ? r.stdout.split(/\r?\n/)[0].trim() : null; };
 export const env = () => { try { return loadEnv(H); } catch (err) { die(err.code === "FOREIGN_HOME" ? err.message : `not set up yet: run  node "${path.join(SKILL, "scripts", "studio.mjs")}" setup`); } };
 export const toolEnv = e => homeToolEnv(e);
-export const hf = (e, args, opts = {}) => run(e.node, hyperframesArgs(e, args), { ...opts, env: { ...toolEnv(e), ...(opts.env || {}) } });
+// HyperFrames switches its parallel drawElement capture off for the whole install after one render falls back (a hidden,
+// permanent breaker), and the screenshot path it then uses is not frame exact from render to render (T6). Keep the router on
+// unless the user set HF_DE_PARALLEL_ROUTER; a page that cannot be routed still falls back for that render only.
+const HF_ROUTER = { HF_DE_PARALLEL_ROUTER: process.env.HF_DE_PARALLEL_ROUTER || "true" };
+export const hf = (e, args, opts = {}) => run(e.node, hyperframesArgs(e, args), { ...opts, env: { ...toolEnv(e), ...HF_ROUTER, ...(opts.env || {}) } });
 export const readJSON = f => JSON.parse(fs.readFileSync(f, "utf8"));
 export const copy = (a, b) => { fs.mkdirSync(path.dirname(b), { recursive: true }); fs.copyFileSync(a, b); };
 export function copyDir(a, b) { if (!fs.existsSync(a)) return; fs.mkdirSync(b, { recursive: true });
