@@ -1,0 +1,13 @@
+reference/
+ledger/
+node_modules/
+dist/
+tmp/
+**/comp/
+**/out/
+**/stills/
+**/audio/
+__pycache__/
+.venv/
+.pytest_cache/
+.DS_Store
