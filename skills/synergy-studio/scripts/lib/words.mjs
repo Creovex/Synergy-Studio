@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { die, say, readJSON, projDir, parseArgs } from "./common.mjs";
+import { readProject } from "./voice.mjs";
 
 export const USAGE = "words <dir>";
 
 // narrated videos: word timings estimated from the script (character-proportional inside each line)
 function words(dir) {
-  const d = projDir(dir), proj = readJSON(path.join(d, "project.json"));
+  const d = projDir(dir), proj = readProject(d);
   if ((proj.mode || "narrated") !== "narrated") die(`words estimates timings from the narration; this is a ${proj.mode} project (use studio transcribe for footage). transcript.json was not touched.`);
   if (!fs.existsSync(path.join(d, "timing.json"))) die(`no timing.json yet: run studio audio ${dir} first (it times the scenes)`);
   const timing = readJSON(path.join(d, "timing.json"));

@@ -149,3 +149,39 @@ onescan −14.5 LUFS, haura −14.2, motion-reel −13.0, doodle-timeline −14.
 names the character only as "a simple character" (checked by grep). Rubrics `test/rubrics/T10.md` to `T13.md` are frozen from here.
 Disk: James approved deleting the stopped full build's tool home (5.6 GB); 19 GiB free after.
 L3: PASS.
+
+## L4: page, compose and sound (changes to the owner's modules)
+
+Workers: implementer B (sonnet): `budget`, `compose`, `render`, `reference`, new `frames` and `synctest`, `template/lib.js`,
+`test/lib-page.test.mjs`. Implementer C (sonnet): `voice`, `say`, `audio`, `words`, `beats` modules, `voice.py`, `audio.py`,
+`tests/*.py`, `test/lib-sound.test.mjs`. Branch files read as ideas only: the local first pass branch. Orchestrator glue:
+`frames` and `synctest` in the dispatcher and help; compose copies and links `src/look.css` when it exists; doctor fails a
+stored synctest result that did not pass.
+Changes: compose gives every lint rule its own message and refuses unknown project.json fields; an unparsable HyperFrames
+lint output is reported; compose writes the bundled `@font-face` rules into the page, because HyperFrames 0.8.92 only reads
+rules in the page itself and otherwise fetched Manrope from Google Fonts (seen in the baseline logs: "Fetched 7 font
+face(s) for Manrope from Google Fonts"); render passes `--fps`, takes the heavy lock, normalises loudness in two linear
+passes and saves `out/captions.json` read from the page with the tool home's browser; `captions({style})` gives `color`,
+`pop` and `box` and records every group in `window.__SS.captions`; `frames` shares its sheet code with `reference`;
+`synctest` (7.9 B) runs through compose and render; voices outside the ten of 7.4 are refused; pause defaults by aspect;
+ducking under a user song about 8 dB; plain errors for bad project.json, unknown music, speed out of range, a missing
+voice.wav, bad or repeated scene ids.
+Independent verifier of the sound part (sonnet, behaviour only): all 12 behaviour items PASS; its findings on raw stack
+traces were fixed by C.
+
+Orchestrator reruns (evidence T2-2026-09-30-1, L4-suites, L4-compare, L4-setup-synctest), literal excerpts:
+```
+node --test test/lib-page.test.mjs: 19 lint fixtures each "compose refuses <rule> with its own message", "compose refuses
+an unknown project.json field", "a clean page composes (falsifier for the lint rules)" ... ℹ tests 29 ℹ pass 29 ℹ fail 0
+node --test test/lib-sound.test.mjs test/lib-setup.test.mjs: ℹ tests 44 ℹ pass 44 ℹ fail 0
+pytest tests: 56 passed in 5.44s
+synctest:  pair 1: flash 2.000 s, beep 2.000 s, offset 0 ms (pairs 2 and 3 the same)
+PASS  synctest: every flash and beep within one frame (33.3 ms), mean offset 0 ms   exit=0
+synctest --beep-offset 3 (falsifier): offsets +100 ms; FAIL ... exit=2
+setup (stored synctest removed first) ends with: PASS synctest: picture and sound line up   exit=0
+```
+Baseline comparison after L4: frames identical (footage within its run to run noise, 0.207 and 0.260); only loudness and
+true peak lines changed, all toward the target: hydration-tips -14.3 to -14 LUFS, three-product -15 to -14.1 LUFS,
+footage-captions -14.1 to -14 LUFS. No render log names fonts.googleapis.com or fonts.gstatic.com (grep count 0 each).
+The L4 renders are the new baseline (`baseline/after-L4`).
+T2: PASS. L4: PASS.

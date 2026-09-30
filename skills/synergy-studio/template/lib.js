@@ -51,7 +51,7 @@
     // (HyperFrames' lint looks for that line in the HTML).
     const finish = () => {
       tl.to({}, {duration: 0.01}, TOTAL - 0.01);
-      window.__SS = {seek: t => { tl.seek(t, false); }, duration: TOTAL};
+      window.__SS = Object.assign(window.__SS || {}, {seek: t => { tl.seek(t, false); }, duration: TOTAL});   // captions() may have added its record first
       return tl;
     };
     // kenburns(sel, t0, t1, {from, to, x, y}): slow push-in on a photo or video (Haura sale-ad style)
@@ -62,8 +62,14 @@
     // captions({...}): word-by-word captions from window.WORDS (transcript.json via `studio transcribe` or `studio words`)
     //   the active word turns `highlight`; groups of up to maxWords / maxChars, breaking at pauses and punctuation
     //   options: top (default: just above the platform's bottom band, else 72%), left/right (px; default clears the platform's side buttons), size, font, color,
-    //   highlight, box (false = no dark pill), boxColor, maxWords, maxChars, from, to (seconds)
+    //   highlight, box (false = no dark pill), boxColor, maxWords, maxChars, from, to (seconds),
+    //   style: "color" (default: the active word turns `highlight`), "pop" (the active word also scales to 1.15) or
+    //   "box" (the active word gets a `highlight` coloured box behind it, its text turns `boxText`, default #111)
+    //   Every group is recorded with its words and times in window.__SS.captions; `studio render` saves it as out/captions.json.
     const captions = (o = {}) => {
+      const style = o.style || "color"; if (!["color", "pop", "box"].includes(style)) throw new Error('captions style must be "color", "pop" or "box"');
+      window.__SS = window.__SS || {}; const record = window.__SS.captions = [];
+      const r3 = x => Math.round(x * 1000) / 1000;
       const words = []; (window.WORDS || []).forEach(w => {                 // split phrase entries into words
         const parts = String(w.text).trim().split(/\s+/).filter(Boolean); const tot = parts.reduce((a, p) => a + p.length + 1, 0); let t = w.start;
         parts.forEach(p => { const d = (w.end - w.start) * (p.length + 1) / tot; words.push({text: p, start: t, end: t + d}); t += d; }); });
@@ -85,12 +91,18 @@
       if (g.length) groups.push(g);
       groups.forEach((grp, gi) => {
         const el = document.createElement("div"); el.className = "abs"; el.style.cssText = "left:0;right:0;opacity:0";
-        const pill = o.box === false ? "" : `display:inline-block;padding:10px 26px;border-radius:22px;background:${o.boxColor || "rgba(0,0,0,.55)"}`;
-        el.innerHTML = `<span style="${pill}">` + grp.map(w => `<span>${w.text.replace(/</g, "&lt;")}</span>`).join(" ") + `</span>`; box.appendChild(el);
+        const pill = (o.box === false ? "" : `display:inline-block;padding:10px 26px;border-radius:22px;background:${o.boxColor || "rgba(0,0,0,.55)"}`) + (style === "pop" ? ";white-space:nowrap" : "");
+        const wordStyle = style === "pop" ? ' style="display:inline-block;margin:0 .07em"' : style === "box" ? ' style="border-radius:14px;padding:0 .16em;margin:0 -.16em;background-color:rgba(0,0,0,0)"' : "";
+        el.innerHTML = `<span style="${pill}">` + grp.map(w => `<span${wordStyle}>${w.text.replace(/</g, "&lt;")}</span>`).join(" ") + `</span>`; box.appendChild(el);
         const end = gi < groups.length - 1 ? Math.min(groups[gi + 1][0].start, grp[grp.length - 1].end + 0.6) : grp[grp.length - 1].end + 0.6;
         tl.to(el, {opacity: 1, duration: 0.08}, grp[0].start); tl.to(el, {opacity: 0, duration: 0.08}, end - 0.08);
-        [...el.firstChild.children].forEach((sp, wi) => { tl.to(sp, {color: o.highlight || "var(--accent)", duration: 0.05}, grp[wi].start);
-          if (wi < grp.length - 1) tl.to(sp, {color: o.color || "#fff", duration: 0.05}, grp[wi + 1].start); });
+        record.push({start: r3(grp[0].start), end: r3(end), words: grp.map(w => ({text: w.text, start: r3(w.start), end: r3(w.end)}))});
+        [...el.firstChild.children].forEach((sp, wi) => {
+          const on = grp[wi].start, off = wi < grp.length - 1 ? grp[wi + 1].start : null;      // the active word: from its start to the next word's start
+          if (style === "box") { tl.to(sp, {backgroundColor: o.highlight || "var(--accent)", color: o.boxText || "#111", duration: 0.05}, on); if (off !== null) tl.to(sp, {backgroundColor: "rgba(0,0,0,0)", color: o.color || "#fff", duration: 0.05}, off); return; }
+          tl.to(sp, {color: o.highlight || "var(--accent)", duration: 0.05}, on);
+          if (style === "pop") tl.to(sp, {scale: 1.15, duration: 0.12, ease: "back.out(2)"}, on);
+          if (off !== null) { tl.to(sp, {color: o.color || "#fff", duration: 0.05}, off); if (style === "pop") tl.to(sp, {scale: 1, duration: 0.08}, off); } });
       });
     };
     return {tl, T, EV, TOTAL, V, S, at, E, rise, fadeIn, fadeOut, pop, press, pick, count, drawIn, stagger, kenburns, punch, captions, finish};

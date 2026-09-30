@@ -1,0 +1,14 @@
+{
+  "name": "fixture",
+  "mode": "film",
+  "aspect": "16:9",
+  "fps": 30,
+  "music": "none",
+  "scenes": [
+    {
+      "id": "s1",
+      "start": 0,
+      "end": 2
+    }
+  ]
+}

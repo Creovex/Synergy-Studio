@@ -1,0 +1,22 @@
+[
+  {
+    "text": "Small",
+    "start": 0.2,
+    "end": 0.5
+  },
+  {
+    "text": "sips",
+    "start": 0.5,
+    "end": 0.9
+  },
+  {
+    "text": "all",
+    "start": 0.9,
+    "end": 1.1
+  },
+  {
+    "text": "day.",
+    "start": 1.1,
+    "end": 1.5
+  }
+]

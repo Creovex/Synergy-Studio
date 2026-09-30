@@ -1,0 +1,17 @@
+{
+  "T": {
+    "s1": {
+      "start": 0,
+      "vo": 0,
+      "vo_end": 2,
+      "end": 2,
+      "dur": 2
+    }
+  },
+  "EV": {},
+  "TOTAL": 2,
+  "fps": 30,
+  "aspect": "16:9",
+  "platform": "",
+  "safe": null
+}

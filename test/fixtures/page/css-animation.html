@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="UTF-8">
+<script src="gsap.min.js"></script>
+<script src="timing.js"></script>
+<script src="words.js"></script>
+<script src="lib.js"></script>
+<link rel="stylesheet" href="looks.css">
+<style>
+html,body{width:{{W}}px;height:{{H}}px}
+#root{width:{{W}}px;height:{{H}}px}
+.spin{animation: spin 1s}
+</style></head>
+<body>
+<div id="root" data-look="paper" data-composition-id="main" data-width="{{W}}" data-height="{{H}}" data-fps="{{FPS}}" data-duration="{{TOTAL}}">
+  <div id="s1" class="scene clip" data-start="{{s1.start}}" data-duration="{{s1.dur}}" data-track-index="1">
+    <div id="title" class="abs h1" style="left:0;right:0;top:40%;text-align:center;font-size:120px">Hello</div>
+    
+  </div>
+  <audio id="mix" src="audio/mix.wav" data-start="0" data-duration="{{TOTAL}}" data-track-index="99"></audio>
+</div>
+<script>
+(function () {
+  const {tl, T, V, rise, captions, finish} = SS.start();
+  rise("#title", V("s1", 0.2));
+  
+  finish();
+  window.__timelines = window.__timelines || {}; window.__timelines["main"] = tl;
+})();
+</script>
+</body></html>

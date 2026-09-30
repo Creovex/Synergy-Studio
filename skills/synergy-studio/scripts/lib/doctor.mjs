@@ -217,6 +217,7 @@ async function synctestChecks(home, log) {
   const env = loadEnv(home);
   if (synctestIsCurrent(env)) {
     const s = env.synctest;
+    if (s.pass === false) return [FAIL("synctest", `the last result failed (mean offset ${s.mean_offset_ms} ms)`, "run synctest again and read its output")];
     const detail = s.mean_offset_ms === undefined ? "the last result matches the installed versions" : `last result: mean offset ${s.mean_offset_ms} ms`;
     return [PASS("synctest", detail)];
   }

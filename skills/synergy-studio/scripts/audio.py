@@ -15,12 +15,15 @@ Two modes (project.json "mode"):
 Music (project.json "music"): "warm" | "calm" | "upbeat" (generated) | "none" |
   {"file": "src/assets/song.mp3", "start": 47.3, "gain_db": -3}  (a section of your own licensed song)
 """
-import json, sys, pathlib
+import json, re, sys, pathlib
 import numpy as np, soundfile as sf
 
 proj = pathlib.Path(sys.argv[1])
 ffmpeg = sys.argv[2] if len(sys.argv) > 2 else "ffmpeg"
-cfg = json.loads((proj / "project.json").read_text())
+try:
+    cfg = json.loads((proj / "project.json").read_text())
+except json.JSONDecodeError as e:
+    sys.exit(f"ERROR: {proj / 'project.json'} is not valid JSON ({e.msg}: line {e.lineno} column {e.colno}, position {e.pos}). Fix the file (a comma, quote or bracket is usually missing) and run the command again.")
 MODE = cfg.get("mode", "narrated")
 if MODE not in ("narrated", "footage", "film"):
     sys.exit(f'unknown "mode": {MODE!r}; use "narrated", "footage" or "film"')
@@ -30,11 +33,25 @@ if FILM:                                # wordless: footage timing, no voice, no
     cfg.setdefault("transition_whoosh", False)
 dur = json.loads((proj / "durations.json").read_text()) if MODE == "narrated" else {}
 SR = 24000
-LEAD, PRE, POST, TAIL = (float(cfg.get(k, d)) for k, d in (("lead", 0.9), ("pre", 0.6), ("post", 1.5), ("tail", 2.5)))
+# pauses omitted from project.json: 9:16 is tighter (lead 0.4, pre 0.3, post 0.7, tail 2.0), other aspects 0.9, 0.6, 1.2, 2.5
+DEFAULTS = {"lead": 0.4, "pre": 0.3, "post": 0.7, "tail": 2.0} if cfg.get("aspect") == "9:16" else {"lead": 0.9, "pre": 0.6, "post": 1.2, "tail": 2.5}
+LEAD, PRE, POST, TAIL = (float(cfg.get(k, DEFAULTS[k])) for k in ("lead", "pre", "post", "tail"))
 scenes = cfg.get("scenes") or sys.exit("project.json has no scenes")
+_ids = [sc.get("id") for sc in scenes]
+for _i, _id in enumerate(_ids):
+    if not (isinstance(_id, str) and re.fullmatch(r"s\d+", _id)):
+        sys.exit(f'ERROR: scene id {_id!r} is not allowed. Scene ids look like s1, s2, s3: rename it in project.json.')
+    if _id in _ids[:_i]:
+        sys.exit(f'ERROR: scene id "{_id}" is used twice. Give every scene its own id (s1, s2, s3) in project.json.')
+_mood = cfg.get("music", "warm")
+if not (isinstance(_mood, dict) or (isinstance(_mood, str) and _mood in ("warm", "calm", "upbeat", "none"))):
+    sys.exit(f'ERROR: unknown music {json.dumps(_mood)}. Set "music" to "warm", "calm", "upbeat", "none" or {{"file": "src/assets/song.mp3", "start": 0, "gain_db": -3}} in project.json.')
 if MODE == "footage":
     bad = [sc.get("id", "?") for sc in scenes if "start" not in sc or "end" not in sc]
     if bad: sys.exit(f'{"film" if FILM else "footage"} mode: every scene needs "start" and "end" in seconds (missing in {", ".join(bad)})')
+
+if MODE == "footage" and cfg.get("voice_track", True) and not (proj / "audio" / "voice.wav").is_file():
+    sys.exit(f'ERROR: audio/voice.wav is missing. Run studio cut {proj} first (or set "voice_track": false for a music only project).')
 
 T, t = {}, 0.0
 if MODE == "footage":
@@ -99,7 +116,7 @@ if isinstance(mood, dict):                                         # the user's 
                     "-ac", "1", "-ar", str(SR), str(tmpw)], check=True)
     a, _ = sf.read(tmpw, dtype="float32"); tmpw.unlink(); music[: min(n, len(a))] = a[:n] * 10 ** (mood.get("gain_db", -3) / 20) / 0.9
     win = int(0.05 * SR); rms = np.sqrt(np.convolve(vo ** 2, np.ones(win) / win, "same"))
-    duck = 1 - 0.7 * np.clip(rms / 0.03, 0, 1); k = int(0.3 * SR); duck = np.convolve(duck, np.ones(k) / k, "same")
+    duck = 1 - 0.6 * np.clip(rms / 0.03, 0, 1); k = int(0.3 * SR); duck = np.convolve(duck, np.ones(k) / k, "same")
     music *= duck * np.minimum(1, tt / 0.3) * np.minimum(1, np.maximum(0, TOTAL - tt) / 2.0)
 elif mood != "none":
     chords = {"warm": [[261.63, 329.63, 392.0, 493.88], [220.0, 261.63, 329.63, 392.0], [174.61, 220.0, 261.63, 329.63], [196.0, 246.94, 293.66, 329.63]],

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { die, say, run, env, needFile, projDir, parseArgs } from "./common.mjs";
+import { videoSheet } from "./frames.mjs";
 
 export const USAGE = "reference <dir> <video> [--every 2]";
 
@@ -10,9 +11,7 @@ function reference(dir, video, every) {
   const e = env(), d = projDir(dir), N = parseFloat(every || 2);
   if (!video) die("usage: studio reference <dir> <video> [--every 2]"); needFile(video, "video");
   const out = path.join(d, "reference"); fs.mkdirSync(out, { recursive: true });
-  const dur = parseFloat(run(e.ffprobe, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video], { capture: true }).stdout);
-  const n = Math.ceil(dur / N), cols = 4, rows = Math.ceil(n / cols);
-  run(e.ffmpeg, ["-loglevel", "error", "-y", "-i", video, "-vf", `fps=1/${N},scale=480:-2,tile=${cols}x${rows}`, "-frames:v", "1", path.join(out, "sheet.jpg")]);
+  const dur = videoSheet(e, video, path.join(out, "sheet.jpg"), { every: N }).duration;
   const log = run(e.ffmpeg, ["-hide_banner", "-i", video, "-vf", "select='gt(scene,0.3)',showinfo", "-an", "-f", "null", "-"], { capture: true, soft: true }).stderr;
   const cuts = [...log.matchAll(/pts_time:([\d.]+)/g)].map(m => +(+m[1]).toFixed(2));
   fs.writeFileSync(path.join(out, "cuts.json"), JSON.stringify({ duration: +dur.toFixed(2), cuts }, null, 1));

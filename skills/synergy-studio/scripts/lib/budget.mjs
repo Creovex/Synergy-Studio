@@ -6,7 +6,8 @@ export const USAGE = "budget <dir>";
 // ---------------------------------------------------------------- budget / say
 function budget(dir) {
   const d = projDir(dir); needNarrated(d, "budget"); const p = readJSON(path.join(d, "project.json")), n = p.scenes.length, L = +(p.length || 30);
-  const DEF = { lead: 0.9, pre: 0.6, post: 1.5, tail: 2.5 }, g = k => (p[k] ?? DEF[k]),   // the same defaults as audio.py
+  const DEF = p.aspect === "9:16" ? { lead: 0.4, pre: 0.3, post: 0.7, tail: 2.0 } : { lead: 0.9, pre: 0.6, post: 1.2, tail: 2.5 },   // the same defaults as audio.py (LITE.md section 6)
+        g = k => (p[k] ?? DEF[k]),
         pauses = g("lead") + g("tail") + p.scenes.reduce((a, s, i) => a + (i ? (s.pre ?? g("pre")) : 0) + (s.post ?? g("post")) + (s.hold || 0), 0);
   const narr = L - pauses, wps = 2.8 * (p.speed || 0.95) / 0.95;
   say(`target ${L} s = pauses ${pauses.toFixed(1)} s (lead ${g("lead")}, pre ${g("pre")} and post ${g("post")} per scene, tail ${g("tail")}) + narration ${narr.toFixed(1)} s`);

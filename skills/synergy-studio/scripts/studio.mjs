@@ -2,7 +2,7 @@
 // Synergy Studio CLI: make narrated motion-graphics videos with HyperFrames + GSAP + Kokoro.
 // Node >= 20, built-ins only. Run `node studio.mjs help`.
 // A thin dispatcher: every command lives in lib/<command>.mjs and exports USAGE and main(argv).
-// Commands: setup doctor new budget say voice audio words compose stills render check cut transcribe silences scenes beats reference
+// Commands: setup doctor synctest new budget say voice audio words compose stills render check cut transcribe silences scenes beats reference frames
 import { die, say, H } from "./lib/common.mjs";
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -12,6 +12,7 @@ Modes (project.json "mode"): narrated (voice sets the timing) · footage (your c
  once
   setup                     one-time install (HyperFrames + Chrome, Kokoro voice, ffmpeg; about 1.1 GB)
   doctor [--full]           check the install (--full also test renders a 60 fps and a three.js page)
+  synctest                  picture against sound for the whole pipeline, once per computer (setup runs it)
  every video
   new <dir> [--mode narrated|footage|film] [--aspect 16:9|9:16|1:1|4:5] [--platform tiktok|reels|shorts|meta|youtube|linkedin|x|website]
             [--length 30] [--look paper|midnight|bold|luxe]      project skeleton (default 16:9; 9:16 defaults to tiktok)
@@ -30,10 +31,11 @@ Modes (project.json "mode"): narrated (voice sets the timing) · footage (your c
   silences <dir> <clip> [--db -32 --min 0.4]  pauses and speech pieces → silences-<clip>.json
   scenes <dir> <clip> [--threshold 0.3]       shot changes → scenes-<clip>.json
   beats <dir> <song> [--start s]  beat grid (times from --start) → beats.json
-  reference <dir> <video> [--every 2]         reference study: contact sheet + cut rhythm → reference/`;
+  reference <dir> <video> [--every 2]         reference study: contact sheet + cut rhythm → reference/
+  frames <video> [--n 12] [--out file]        contact sheet of any video, no project needed → one JPEG`;
 
 const COMMANDS = ["setup", "doctor", "new", "budget", "say", "voice", "audio", "words", "compose", "stills", "render", "check",
-                  "cut", "transcribe", "silences", "scenes", "beats", "reference"];
+                  "cut", "transcribe", "silences", "scenes", "beats", "reference", "frames", "synctest"];
 // setup and doctor report their own failures as messages; the other commands are loaded as they stand
 const lib = async (name, argv) => { try { return await (await import(`./lib/${name}.mjs`)).main(argv); } catch (err) { die(err.message); } };
 if (cmd === undefined || cmd === "help" || cmd === "--help" || cmd === "-h") say(HELP);
