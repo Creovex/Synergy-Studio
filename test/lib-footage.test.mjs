@@ -313,3 +313,28 @@ test("transcribe names the missing Whisper model and how to get it, never brew",
   assert.equal(missingPart(e, "proj"), "");
   assert.match(missingPart({ ...e, whisper: { available: true, path: path.join(home, "nope") } }, "proj"), /whisper-cli program is missing \(.*nope\)/);
 });
+
+test("cutSpans gives the span of every clip from cuts.json", async () => {
+  const { cutSpans } = await lib("transcribe.mjs");
+  const d = scratch("spans"); assert.equal(cutSpans(d), null);
+  fs.writeFileSync(path.join(d, "cuts.json"), JSON.stringify({ total: 12.4, cuts: [0, 7.8] }));
+  assert.deepEqual(cutSpans(d), [[0, 7.8], [7.8, 12.4]]);
+  fs.writeFileSync(path.join(d, "cuts.json"), "not json"); assert.equal(cutSpans(d), null);
+});
+
+// the reference video has speech; a cleaned cut of two clips came back from Whisper as one 13 s word, and a word crossed the cut
+const ONESCAN = path.join(ROOT, "reference", "videos", "onescan.mp4");
+const modelThere = ENV && fs.existsSync(path.join(ENV.hf_home, ".cache", "hyperframes", "whisper", "models", "ggml-small.en.bin"));
+for (const clean of [true, false]) {
+  test(`transcribe of a two clip cut with clean_voice ${clean} finds the words clip by clip, none across the cut`, { skip: skipReal || (!fs.existsSync(ONESCAN) ? "reference video missing" : !ENV.whisper?.available || !modelThere ? "whisper model not installed" : false), timeout: 240000 }, () => {
+    const dir = scratch("transcribe cut"); fs.mkdirSync(path.join(dir, "src", "footage"), { recursive: true });
+    fs.copyFileSync(ONESCAN, path.join(dir, "src", "footage", "clip.mp4"));
+    project(dir, { name: "t", mode: "footage", aspect: "9:16", fps: 30, edit: { grade: "warm", clean_voice: clean, clips: [{ src: "src/footage/clip.mp4", in: 16.5, out: 24.3 }, { src: "src/footage/clip.mp4", in: 0.7, out: 5.9 }] } });
+    assert.equal(studio(["cut", dir]).status, 0);
+    const r = studio(["transcribe", dir]); assert.equal(r.status, 0, r.stderr);
+    const words = JSON.parse(fs.readFileSync(path.join(dir, "transcript.json"), "utf8")), cut = JSON.parse(fs.readFileSync(path.join(dir, "cuts.json"), "utf8")).cuts[1];
+    assert.ok(words.length >= 20, `${words.length} words`);
+    assert.ok(words.every((w) => w.end - w.start < 3), "no word runs for seconds");
+    assert.ok(words.every((w) => w.end <= cut + 1e-6 || w.start >= cut - 1e-6), "no word crosses the cut");
+  });
+}

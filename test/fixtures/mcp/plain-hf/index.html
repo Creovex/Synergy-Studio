@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=640, height=360">
+<script src="gsap.min.js"></script>
+<style>
+html, body { margin: 0; width: 640px; height: 360px; background: #1c2b3a; overflow: hidden; }
+#root { position: relative; width: 640px; height: 360px; font-family: Helvetica, Arial, sans-serif; background: linear-gradient(135deg, #1c2b3a, #2f5d62); }
+#title { position: absolute; left: 0; right: 0; top: 60px; text-align: center; color: #f4f1de; font-size: 44px; font-weight: 700; }
+#ball { position: absolute; left: 40px; top: 190px; width: 90px; height: 90px; border-radius: 45px; background: #e07a5f; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-width="640" data-height="360" data-fps="30" data-duration="2">
+  <div id="title" class="clip" data-start="0" data-duration="2" data-track-index="1">Plain HyperFrames</div>
+  <div id="ball" class="clip" data-start="0" data-duration="2" data-track-index="2"></div>
+  <audio id="mix" src="mix.wav" data-start="0" data-duration="2" data-track-index="3" data-volume="1"></audio>
+</div>
+<script>
+(function () {
+  var tl = gsap.timeline({ paused: true });
+  tl.to("#ball", { x: 460, rotation: 180, duration: 2, ease: "none" }, 0);
+  tl.to("#title", { y: 20, duration: 2, ease: "none" }, 0);
+  window.__timelines = window.__timelines || {};
+  window.__timelines["main"] = tl;
+})();
+</script>
+</body>
+</html>

@@ -16,6 +16,15 @@ const IMPORT_EXT = [".srt", ".vtt", ".json"];                 // caption files a
 
 const r3 = x => Math.round(x * 1000) / 1000;
 
+// [from, to] seconds of every clip of the last cut, from cuts.json ({total, cuts: start of each clip}); null when there is none
+export function cutSpans(d) {
+  try {
+    const c = readJSON(path.join(d, "cuts.json"));
+    if (!Array.isArray(c.cuts) || !c.cuts.length || !Number.isFinite(c.total)) return null;
+    return c.cuts.map((from, i) => [from, i + 1 < c.cuts.length ? c.cuts[i + 1] : c.total]);
+  } catch { return null; }
+}
+
 // one entry per word: {text, start, end}; entries that hold a phrase are shared out by word length; unusable entries are dropped
 export function toWords(entries) {
   const words = [];
@@ -72,16 +81,32 @@ async function transcribe(dir, media) {
     if (!e.whisper?.available) die(`words cannot be timed: ${missingPart(e, dir)}\n(studio doctor shows what captions need)`);
     const bad = soundProblem(e, src); if (bad) die(bad);
   }
+  // the spans of audio Whisper gets one at a time: the clips of a cut (cuts.json) when the default cut voice is transcribed, else the whole file.
+  // Whisper is unstable on a joined cut (a cleaned cut of two clips came back as one word, "media.", 13 s long) and a word must never
+  // carry over a cut, so each clip is transcribed alone and its words are moved to their place on the edited timeline.
+  const spans = media || imported ? null : cutSpans(d);
+  const one = (file, scratch, offset, tag) => {
+    const dst = path.join(scratch, tag); fs.mkdirSync(dst);
+    const r = hf(e, ["transcribe", file, "-d", dst, "--json", ...(imported ? [] : ["--engine", "whisper", "-m", MODEL])], { capture: true, soft: true });
+    const out = path.join(dst, "transcript.json");
+    if (r.status !== 0 || !fs.existsSync(out)) die(hfFailure(r, e, dir));
+    const entries = readJSON(out);
+    if (imported) return entries;
+    return refineWords(toWords(entries), frameLevels(e.ffmpeg, file)).map(w => ({ ...w, start: r3(w.start + offset), end: r3(w.end + offset) }));
+  };
   const run1 = () => {
     const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ss-transcribe-"));       // HyperFrames writes here, not into the project (it also rewrites .html files it finds)
     try {
       const model = path.join(e.hf_home, ".cache", "hyperframes", "whisper", "models", `ggml-${MODEL}.bin`);
       if (!imported && !fs.existsSync(model)) say(`First transcription on this computer: downloading the Whisper ${MODEL} model (about ${MODEL_MB} MB) from huggingface.co. This can take a few minutes.`);
-      const args = ["transcribe", src, "-d", scratch, "--json", ...(imported ? [] : ["--engine", "whisper", "-m", MODEL])];
-      const r = hf(e, args, { capture: true, soft: true });
-      const out = path.join(scratch, "transcript.json");
-      if (r.status !== 0 || !fs.existsSync(out)) die(hfFailure(r, e, dir));
-      const entries = readJSON(out), words = imported ? entries : refineWords(toWords(entries), frameLevels(e.ffmpeg, src));
+      let words = [];
+      if (spans && spans.length > 1) {
+        spans.forEach(([from, to], i) => {
+          const piece = path.join(scratch, `piece${i}.wav`);
+          run(e.ffmpeg, ["-loglevel", "error", "-y", "-ss", String(from), "-t", String(+(to - from).toFixed(3)), "-i", src, "-ar", "16000", "-ac", "1", piece]);
+          if (!soundProblem(e, piece)) words = words.concat(one(piece, scratch, from, `t${i}`).filter(w => w.start < to).map(w => ({ ...w, end: Math.min(w.end, r3(to)) })));
+        });
+      } else words = one(src, scratch, 0, "t");
       if (!words.length) die(`no words found in ${path.basename(src)}. Whisper heard no speech; check that the audio has a voice in it.`);
       fs.writeFileSync(path.join(d, "transcript.json"), JSON.stringify(words, null, 1));
       return words;

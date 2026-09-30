@@ -247,3 +247,34 @@ last result: mean offset 0 ms"; 2.1G; second setup all 10 "already done", real 6
 default home: doctor --full exit=0 all PASS; second setup all "already done"
 ```
 The base is now `3543ba7`.
+
+## L6: MCP server, examples and packaging
+
+Workers (sonnet): implementer F (`mcp/*.mjs` zero dependency server with 35 tools, jobs in the tool home, resources and
+prompts; `.claude-plugin/plugin.json` and `marketplace.json`, `.mcp.json`, `bundle/manifest.json`, `scripts/pack-bundle.mjs`,
+root `package.json` with dev dependencies `@anthropic-ai/mcpb` 2.1.2 and `@modelcontextprotocol/sdk` 1.31.0,
+`test/mcp.test.mjs`, `test/harness/t15-mcp-end-to-end.mjs`), implementer G (`examples/footage-captions` adapted to a
+narrated 16:9 clip: clip ranges, `caption_fixes` {"one scan": "OneScan"}, tags that fit the narration; examples README;
+`test/harness/t5-examples.mjs`), implementer D (defects found by G: Whisper small.en degenerated on a joined cut of two
+clips, "media." for 13 s, with or without `clean_voice`; `transcribe` now sends each clip of the cut separately and a word
+never starts before its clip; "Every" moved from 6.78 s to 7.9 s, after the cut at 7.8 s). Tools added beyond the 8.2
+table: `studio_reference_study` (the CLI `reference` command), and inputs `card`, `out`, `whisper_model`, `beep_offset`.
+Hyphenated CLI flags become snake case inputs. The reference clone now sits at the base `3543ba7` for T0.
+
+Orchestrator reruns (evidence T14, T15, T17, T5, T0-2, T3-2, T4-3), literal excerpts:
+```
+T14 initialize round trip incl. process start: 74 ms; 15 tests: empty tool home (8), falsifier "a server with one tool
+    removed: the tool list assertion fails", installed home (6 incl. "import, refusals, lint, render job and check",
+    "studio_export copies only the five allowed items"); ℹ tests 15 ℹ pass 15 ℹ fail 0
+T15 20 MCP calls in the default homes; check lines all PASS (h264 1080x1920 30/1, 30 fps, aac, 28.30 s, -14 LUFS,
+    -1.7 dBTP, no black, nothing frozen, audio against mix lag 0 ms correlation 0.999); T15 PASS  exit=0
+T17 mcpb validate manifest.json: Manifest schema validation passes!; bundle 232424 bytes, 84 files; unpacked server
+    answered initialize and lists 35 tools; paths with node_modules, tmp, reference, ledger or test: 0
+T5  hydration-tips 9 lines PASS, three-product 9 lines PASS, footage-captions 10 lines PASS (captions: 31 transcript
+    words all in out/captions.json), falsifier: removed id "s1"; compose exit 1; data-start message present; exit=0
+T0  against the owner's text at 3543ba7: 110 items: 110 PASS, 0 FAIL; falsifier fails on studio fly
+T3  rerun: 31 words for c1 (So,@0.275 if@0.44 you@0.71 ...); empty WAV: plain error, exit=1
+T4  rerun: median onset error 4 ms, 95th percentile 6 ms; exit=0
+```
+Not proven here: the bundle opened in Claude Desktop (T18, James) and the plugin inside Claude Code (L8).
+T5, T14, T15, T17: PASS. L6: PASS.

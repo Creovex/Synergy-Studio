@@ -1,0 +1,12 @@
+{
+  "name": "synergy-local",
+  "description": "Local marketplace for the Synergy Studio plugin.",
+  "owner": { "name": "Synergy Studio" },
+  "plugins": [
+    {
+      "name": "synergy-studio",
+      "source": "./",
+      "description": "Make and improve videos with Claude: tools for narrated explainers, ads and footage edits, plus the skill that drives them."
+    }
+  ]
+}

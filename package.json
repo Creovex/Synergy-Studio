@@ -1,0 +1,13 @@
+{
+  "name": "synergy-studio",
+  "private": true,
+  "description": "Synergy Studio: development tools only. The MCP server itself has no dependencies.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "pack": "node scripts/pack-bundle.mjs"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
+    "@modelcontextprotocol/sdk": "1.31.0"
+  }
+}
