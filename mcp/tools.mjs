@@ -7,7 +7,7 @@ import { SKILL_DIR, STUDIO_MJS, UserError, home, paths, projectsRoot, tryEnv, no
 import { newJobId, startJob, waitForJob, readJob, logLines, isFinal, jobImages, dropJob, progressText, MAX_WAIT_SEC } from "./jobs.mjs";
 import { existingProject, projectPath, resolveInside, writeProjectFile, listProjectFiles, readProjectFile, addProjectFile, listProjects, latestMp4, exportProject, NAME_RE, checkName } from "./files.mjs";
 import { importHyperframes, planHyperframes, ALLOWED_COMMANDS, JOB_COMMANDS } from "./hyperframes.mjs";
-import { resolvedSkill, guideAppendix, readReference, referenceNames } from "./content.mjs";
+import { resolvedSkill, guideAppendix, readReference, referenceNames, readSkillFile, skillFileList } from "./content.mjs";
 import { imageContent } from "./images.mjs";
 import { pathToFileURL } from "node:url";
 
@@ -150,6 +150,16 @@ define(
   READ,
   async ({ name }) => text(readReference(name)),
   { title: "Read a reference" },
+);
+
+define(
+  "studio_example",
+  "Reads one file of the runnable examples or the page templates and helper kits (sketch.js, lib.js, looks.css, index.html). Use it when the guide points to examples or template files for patterns to copy.",
+  { path: { type: "string", description: `Path relative to the skill folder, only under examples/ or template/, for example examples/three-product/src/index.html or template/sketch.js. Available: ${skillFileList().join(", ")}.` } },
+  ["path"],
+  READ,
+  async ({ path: rel }) => text(readSkillFile(rel)),
+  { title: "Read an example or template" },
 );
 
 define(
@@ -478,7 +488,10 @@ define(
       args: ["say", dir, line, ...flagArgs([["voice", voice]])],
       project: dir,
       signal: ctx.signal,
-      after: async () => `\nSpeech file for the user to play: ${path.join(dir, "audio", "say.wav")}`,
+      after: async () => {
+        const wav = path.join(dir, "audio", "say.wav");
+        return `\nSpeech file for the user to play: ${wav}\nfile link: ${pathToFileURL(wav).href}`;
+      },
     });
   },
   { needsHome: true, title: "Say one line" },
@@ -629,7 +642,7 @@ define(
 // ---------------------------------------------------------------- output
 define(
   "studio_open",
-  "Gives the absolute path and the file:// link of the project's newest finished MP4. Use it at the end to tell the user where the video is, or to find it again.",
+  "Gives the absolute path and the file:// link of the project's newest finished MP4, and of its smaller -share.mp4 copy when the render was over 25 MB. Use it at the end to tell the user where the video is, or to find it again.",
   { name: nameProp },
   ["name"],
   READ,
@@ -637,7 +650,9 @@ define(
     const dir = existingProject(name);
     const mp4 = latestMp4(dir);
     if (!mp4) throw new UserError(`Project ${name} has no rendered MP4 yet. Run studio_render first.`);
-    return text(`${mp4.file}\n${pathToFileURL(mp4.file).href}\n${mp4.size} bytes, made ${new Date(mp4.mtimeMs).toISOString()}`);
+    const share = mp4.file.replace(/\.mp4$/, "-share.mp4");
+    const shareLines = fs.existsSync(share) ? `\nSmaller share copy: ${share}\n${pathToFileURL(share).href}` : "";
+    return text(`Full render: ${mp4.file}\n${pathToFileURL(mp4.file).href}\n${mp4.size} bytes, made ${new Date(mp4.mtimeMs).toISOString()}${shareLines}`);
   },
   { title: "Where the video is" },
 );

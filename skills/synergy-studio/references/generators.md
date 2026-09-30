@@ -1,10 +1,15 @@
 # Using AI image/video generators (only if one is connected, e.g. the Higgsfield MCP)
 
+The generator tools named below (`get_workflow_instructions`, `models_explore`, `media_import_url`, its upload and wait
+tools) belong to that other connected server, not to Synergy Studio. Use them only when that server is connected and the
+user agreed to spend credits. If none is connected, skip this whole page. Whatever a generator makes reaches the video
+only as a file on the Mac, added with `studio_file_add`.
+
 Synergy Studio builds videos from code; generators are **ingredients**, never the whole video.
 Use one only for shots that cannot be made otherwise (a lifestyle shot, a scene, a B-roll clip, a product
 in a setting) and only when the user agrees to spend their credits. Never generate to test or demonstrate.
 
-- **Read the tool's own instructions first.** For Higgsfield: call `get_workflow_instructions` (no
+- **Read the generator server's own instructions first.** For Higgsfield: call `get_workflow_instructions` (no
   argument) before any multi-step video job, and use `models_explore` to pick a model. Upload local files
   with its upload tool, alone in that turn; import web images with `media_import_url`.
 - **Stills first, then animate.** Generate and approve a still, then turn it into motion; keep the exact
@@ -16,7 +21,8 @@ in a setting) and only when the user agrees to spend their credits. Never genera
 - **Consistency:** repeat the same identity/style/lighting/palette words every time and reuse the same
   reference media; there are no seeds to lock a look.
 - **Never let a model draw text, prices, logos or labels.** Composite the real logo and all text in HTML.
-- Bring each clip into the video as footage (`<video muted>` in the page, or through `edit.clips`), check
+- Bring each clip into the video as footage: the file must be on the Mac (if it only exists online, ask the user to
+  download it), then `studio_file_add`; use it as `<video muted>` in the page or through `edit.clips`, check
   its aspect ratio and crop, and log any crop in feedback.md.
 - Generated people and voices are AI content: apply review.md conditions 20–23.
 - Jobs: submit independent jobs together, wait with the tool's wait function, stop after about 10 polls

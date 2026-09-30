@@ -1,7 +1,7 @@
 # Illustration: hand-drawn looks, textures and procedural art
 
 Not every video should look like clean vector motion graphics. When the idea or the reference calls for
-drawn, textured, cinematic images, use the **sketch kit** (`template/sketch.js`, copied into `comp/` by
+drawn, textured, cinematic images, use the **sketch kit** (`template/sketch.js`, read it with `studio_example` `path: "template/sketch.js"`; compose copies it into `comp/` by
 `compose`). It draws on one `<canvas>`, frame by frame, from the time `t`.
 
 ## Setup
@@ -34,8 +34,8 @@ Keep the scene divs (empty is fine): they carry the timing and the sound-effect 
 | `K.use(ctx2, matrix, boil)` | draw into another canvas (a polaroid, a TV screen, a thumbnail); returns a restore function |
 | `hash(i, j)`, `rng(seed)`, `seg(t, a, b)`, `ease`, `eOut`, `eIn`, `eBack`, `lerp` | deterministic noise and timing |
 
-Worked example (a 51 s film with characters, zoom through an eye, a storm, a meeting, four procedural pieces,
-polaroids of earlier shots): `media/claude-and-syn-story/src/index.html` in the storage repository.
+Rendered, working snippets of the kit (a match cut through an eye, drawing on twos, particles, a look card) are in
+styles.md. To read the kit itself, call `studio_example` with `path: "template/sketch.js"`.
 
 ## Craft
 - **Full-bleed hero images.** One big subject fills the frame (a prism, a sunflower, a galaxy). Small props
@@ -58,7 +58,7 @@ polaroids of earlier shots): `media/claude-and-syn-story/src/index.html` in the 
 - No `Math.random`, no `Date`, no `requestAnimationFrame`. The render seeks `t` in any order.
 - Canvas text needs its font loaded. Put a hidden HTML element that uses the same font in the page
   (`<div style="position:absolute;left:-9999px;font-family:Manrope;font-weight:800">Aa</div>`).
-- The hatching and line boil make big files (about 55 MB for 51 s at 1080p). `studio render` then also writes
+- The hatching and line boil make big files (about 55 MB for 51 s at 1080p). `studio_render` then also writes
   a `-share.mp4` under 25 MB for chat.
 
 ## Other hand-made looks (HTML/SVG instead of canvas)

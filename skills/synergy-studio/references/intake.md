@@ -8,7 +8,7 @@ List what the request already answers. **Never ask an item it answers.** For eve
 | Item | Default if the user doesn't say (state it aloud, never ask it) |
 |---|---|
 | Kind of video (ad · explainer · footage edit · photo ad · story/film · art or music piece) | from what they gave you |
-| Reference video or images: style, structure or both? | style; run `studio reference` and write the style card (cinema.md §1) |
+| Reference video or images: style, structure or both? | style; call `studio_reference_study` and write the style card (cinema.md §1); a look to copy: `studio_look_from` (styles.md) |
 | Platform and format | 9:16 for social, 16:9 for YouTube/website |
 | Length | 30 s social, 60–90 s explainer |
 | **Audience**: one person in a situation, not a demographic | never defaulted: ask |
@@ -36,10 +36,10 @@ platform's political-ad rules)?
 - An unclear answer gets one narrow follow-up; then take the default and list it as an open gap.
 - State every default you take in your message ("I'll assume one 30-second 9:16 version.").
 
-## 4. Write brief.md (template made by `studio new`)
+## 4. Write brief.md (template made by `studio_project_new`)
 One line per item marked `ANSWER:` (the user's words), `DEFAULT:` (your stated default), `PROPOSED:`
 (your suggestion that needs the user's yes, e.g. a message you drafted) or `UNRESOLVED:` (with the reason,
-also under Open gaps). If the user can't be reached, build with PROPOSED items and list them in the delivery
+also under Open gaps). If the user can't be reached (nobody can answer, for example a scheduled run), take the stated defaults, build with PROPOSED items and list them in the delivery
 message as "assumed; tell me if any is wrong". Every later step reads brief.md; a fact that is
 not in it is not invented later: go back and ask one targeted question.
 

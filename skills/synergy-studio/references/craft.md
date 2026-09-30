@@ -45,8 +45,8 @@ Visit <site>. Hold the end card at least 2 s. Offers state the exact terms (5% o
 ## Platform specs
 | Platform | Format | Length that works | Notes |
 |---|---|---|---|
-| TikTok | 9:16, 1080×1920 | 15–60 s | captions on; keep the bottom 22% and right 12% clear |
-| Instagram Reels | 9:16 | 15–60 s | same safe areas; a 1:1 or 4:5 cut for the feed |
+| TikTok | 9:16, 1080×1920 | 15–60 s | captions on; keep the app's covered areas clear (bottom 400 px and right 180 px at 1080×1920, design.md) |
+| Instagram Reels | 9:16 | 15–60 s | covered areas are larger (bottom 672 px, design.md); a 1:1 or 4:5 cut for the feed |
 | YouTube Shorts | 9:16 | ≤ 60 s | a searchable title with the main keyword |
 | YouTube | 16:9, 1920×1080 | 1–10 min | chapters for > 6 min; keyword in the first 30 s |
 | LinkedIn | 1:1 or 16:9 | 30–90 s | professional framing, captions, text overlay |
@@ -63,7 +63,7 @@ a thumbnail/cover frame time, and the "AI-generated" label reminder when a synth
 | Logo or title card first | viewers scroll before the point | open on the hook; brand at the end and in a corner |
 | Several ideas in one short | unfocused, low retention | one idea; split the rest into more videos |
 | Tiny or fast text | unreadable on phones | design.md sizes; hold 0.25 s per word + 0.6 s |
-| Transitions with no reason (whips, flashes, spins) | reads as cheap (the HAURA v1 was rejected for this) | cuts, dissolves, slow push-ins; or a motivated move (cinema.md §4) |
+| Transitions with no reason (whips, flashes, spins) | reads as cheap (the first HAURA sale ad was rejected for this) | cuts, dissolves, slow push-ins; or a motivated move (cinema.md §4) |
 | Music louder than the voice | words get lost | the mix ducks music about 8 dB under voice; keep it |
 | A CTA buried or missing | nobody acts | one clear action, said and shown, last 3–5 s |
 | Invented numbers or claims | trust and legal risk | only sourced facts; otherwise cut |

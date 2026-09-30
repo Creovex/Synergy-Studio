@@ -1,23 +1,23 @@
-# Light 3D with three.js (r186, bundled; no Blender needed)
+# Light 3D with three.js (bundled; no Blender needed)
 
 Good for: product turntables, a logo or title in 3D, simple objects moving, camera orbits, a `.glb`
-model (made in Blender, downloaded CC0, or the user's) with its animations. Not for photoreal scenes.
-Cost: about 0.3–0.6 s per 1080p frame on a laptop CPU (a 7 s scene rendered in about 1 minute).
+model (made in Blender, a CC0 file the user saves on the Mac, or the user's own) with its animations. Not for photoreal scenes.
+Cost: about 0.3–0.6 s per 1080p frame on a laptop CPU (a 7 s scene rendered in about 1 minute). A `.glb` model the user gives goes into the project with `studio_file_add` (it lands in `src/assets/`).
 
 ## Page setup
 1. In `<head>`, after the other scripts:
    `<script type="importmap">{"imports":{"three":"./three/three.module.js","three/addons/":"./three/addons/"}}</script>`
-   (`studio compose` copies three.js and these add-ons when the page mentions three: `loaders/GLTFLoader.js`,
+   (`studio_compose` copies three.js and these add-ons when the page mentions three: `loaders/GLTFLoader.js`,
    `utils/BufferGeometryUtils.js`, `utils/SkeletonUtils.js`, `environments/RoomEnvironment.js`,
    `geometries/TextGeometry.js`, `loaders/FontLoader.js`, `geometries/RoundedBoxGeometry.js`).
 2. A `<canvas id="c3d" width="{{W}}" height="{{H}}">` inside the scene div.
-3. The code in `<script type="module">` (full working example: `<skill>/examples/three-product/src/index.html`):
+3. The code in `<script type="module">` (full working example: `studio_example` with `path: "examples/three-product/src/index.html"`):
 ```js
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 const {tl, T, S, finish} = SS.start();
 const r = new THREE.WebGLRenderer({canvas: document.getElementById("c3d"), antialias: true, preserveDrawingBuffer: true, alpha: true});
-r.setPixelRatio(1); r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFShadowMap;   // PCFSoftShadowMap was removed in r186
+r.setPixelRatio(1); r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFShadowMap;   // PCFSoftShadowMap was removed in the pinned three.js
 r.toneMapping = THREE.ACESFilmicToneMapping; r.outputColorSpace = THREE.SRGBColorSpace;
 // … scene, lights, camera, meshes …
 const st = {t: 0}, dur = T.s1.dur;

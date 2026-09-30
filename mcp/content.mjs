@@ -132,3 +132,45 @@ export function getPrompt(name, args = {}) {
   }
   return { description: PROMPTS.find((p) => p.name === name).description, messages: [{ role: "user", content: { type: "text", text } }] };
 }
+
+// ---------------------------------------------------------------- examples and templates as files
+const SKILL_FILE_ROOTS = ["examples", "template"];
+const MAX_SKILL_FILE_BYTES = 400 * 1024;
+
+export function skillFileList() {
+  const rows = [];
+  const walk = (dir, rel) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const childRel = `${rel}/${entry.name}`;
+      if (entry.isSymbolicLink() || entry.name === ".DS_Store") continue;
+      if (entry.isDirectory()) walk(path.join(dir, entry.name), childRel);
+      else if (entry.isFile()) rows.push(childRel);
+    }
+  };
+  for (const root of SKILL_FILE_ROOTS) if (fs.existsSync(path.join(SKILL_DIR, root))) walk(path.join(SKILL_DIR, root), root);
+  return rows;
+}
+
+// A text file under examples/ or template/ of the skill folder; anything else is refused with the list.
+export function readSkillFile(rel) {
+  const available = () => `Available files:\n${skillFileList().join("\n")}`;
+  if (typeof rel !== "string" || rel.trim() === "" || rel.includes("\0")) throw new UserError(`Give a path relative to the skill folder, for example examples/three-product/src/index.html. ${available()}`);
+  const clean = rel.trim().replace(/\\/g, "/").replace(/^\.\//, "");
+  const full = path.resolve(SKILL_DIR, clean);
+  const within = SKILL_FILE_ROOTS.some((root) => {
+    const r = path.relative(path.join(SKILL_DIR, root), full);
+    return r !== "" && r !== ".." && !r.startsWith(`..${path.sep}`) && !path.isAbsolute(r);
+  });
+  if (!within || clean.split("/").includes("..")) throw new UserError(`${rel} is not allowed: only files under examples/ and template/ can be read. ${available()}`);
+  let real;
+  try {
+    real = fs.realpathSync(full);
+  } catch {
+    throw new UserError(`There is no file ${clean}. ${available()}`);
+  }
+  const realRoots = SKILL_FILE_ROOTS.map((root) => fs.realpathSync(path.join(SKILL_DIR, root)));
+  if (!realRoots.some((root) => !path.relative(root, real).startsWith("..")) || !fs.statSync(real).isFile()) throw new UserError(`${rel} is not a readable file under examples/ or template/. ${available()}`);
+  const size = fs.statSync(real).size;
+  if (size > MAX_SKILL_FILE_BYTES) throw new UserError(`${clean} is ${size} bytes, over the ${MAX_SKILL_FILE_BYTES} byte limit.`);
+  return fs.readFileSync(real, "utf8");
+}

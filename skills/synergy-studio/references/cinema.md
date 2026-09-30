@@ -4,9 +4,10 @@ Use this for stories, films, music pieces and anything the user compares to a re
 explainers can borrow from it too. Everything here is a tool, not a rule.
 
 ## 1. Study the reference before you design (when the user gives one)
-`studio reference <dir> <video>` writes `reference/sheet.jpg` (one frame every 2 s) and
-`reference/cuts.json` (shot changes, average shot length). Look at the sheet and at 2–3 full-size frames
-(`ffmpeg -ss 6 -i ref.mp4 -frames:v 1 f.png`). Then write a **style card** in brief.md:
+`studio_reference_study` needs a project, so make one first with `studio_project_new`; then `studio_reference_study` (project `name`, `video_path`) writes `reference/sheet.jpg` (one frame every 2 s) and
+`reference/cuts.json` (shot changes, average shot length). Look at the sheet, and for a closer look call `studio_frames`
+with a small `n` (4 to 6: fewer, larger tiles; a tile is 480 px wide). No tool returns a full-size frame of a video, so
+when a detail matters (a logo, a face, a texture) ask the user for a still of it. Then write a **style card** in brief.md:
 
 | Line | What to write (be literal) | Example (the owner's mascot reference) |
 |---|---|---|
@@ -58,7 +59,7 @@ A transition is cheap when it has no reason. A whip pan inside a calm luxury ad 
 feedback). A zoom through an eye into a memory is the idea itself.
 
 ## 5. Pace to the music
-Take the score's tempo or `studio beats`. Cut and hit on beats (one beat = 60 / BPM s). Let the quiet acts
+Take the score's tempo or `studio_beats`. Cut and hit on beats (one beat = 60 / BPM s). Let the quiet acts
 breathe: 4–6 s shots with slow moves. Speed up in the montage: 1.5–3 s shots.
 
 ## 6. Wordless storytelling

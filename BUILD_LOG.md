@@ -278,3 +278,33 @@ T4  rerun: median onset error 4 ms, 95th percentile 6 ms; exit=0
 ```
 Not proven here: the bundle opened in Claude Desktop (T18, James) and the plugin inside Claude Code (L8).
 T5, T14, T15, T17: PASS. L6: PASS.
+
+## L7: the skill text
+
+The owner's SKILL.md and references were taken in unchanged at `3543ba7` first (commit "the owner's skill text taken in").
+Writer H (sonnet) then applied LITE.md section 9: his four wording corrections (compatibility, step 0, where projects live,
+older projects), the sweep of every `studio <command>` to its tool, `references/commands.md` as the tool reference, new
+`references/mcp.md` (tools, jobs, images, path rules, Claude Desktop limits) and `references/styles.md` (built in looks, a
+look from words and from a reference, the sketch kit with hard cuts, drawing on twos at 24 fps, particles, 60 fps, caption
+styles; every snippet rendered once with stills, render and check before it was written in), the non interactive rule,
+and the writing rules. Instructions no tool can carry out were rewritten or removed: ffmpeg frame grabs (now `studio_frames`),
+numpy score scripts (now the user's track or a generated bed), a Playwright troubleshooting row, links to other repositories.
+Fresh reader check (LITE 9 item 8), two rounds with new sonnet workers that never saw the build:
+round 1: UNMAPPED INSTRUCTIONS: 2 (examples only reachable as MCP resources; generator tools of another server named as if
+ours). Fixed: new tool `studio_example` (implementer F; files under examples/ and template/), text fixes by H; `studio_say`
+returns an absolute path, `studio_open` also the share copy. Round 2: "UNMAPPED INSTRUCTIONS: 0", "none".
+Orchestrator glue: the film starter's music is the generated "warm" bed (it pointed at a missing score.wav).
+NOTICE.md written by a sonnet worker from the installed licence files and official pages. James decided on the licences:
+"Proceed as is (Recommended)" (GPL eSpeak NG and phonemizer in the voice process, GPL ffmpeg as a separate program, GSAP's
+no charge licence; the repo and the bundle redistribute none of them).
+
+Orchestrator reruns (evidence L7-checks-2026-09-30-1 and -2), literal:
+```
+dash grep count 0; version grep count 0
+grep "studio [a-z]": references/mcp.md:6 (the one sentence that explains the old naming)
+T0 --tools on the adopted text: 81 items: 81 PASS, 0 FAIL; falsifier fails on studio fly
+T14: ✔ studio_guide equals SKILL.md with the skill folder resolved; ℹ tests 16 ℹ pass 16 ℹ fail 0
+T17: Manifest schema validation passes!; smoke test: the unpacked server answered initialize and lists 36 tools;
+     size: 251886 bytes, 86 files
+```
+T0, T14, T17: PASS. L7: PASS.

@@ -29,7 +29,7 @@ function newProject(dir, opts) {
     proj.mode = mode; proj.scenes = [{ id: "s1", start: 0, end: third }, { id: "s2", start: third, end: +(2 * third).toFixed(2) }, { id: "s3", start: +(2 * third).toFixed(2), end: L }];
     proj.events = { s2: { card: { t: 0.2, sfx: "pop" } } };
     if (mode === "footage") { proj.edit = { clips: [{ src: "src/footage/clip1.mp4", in: 0, out: third }], grade: "warm", clean_voice: true }; fs.mkdirSync(path.join(d, "src", "footage"), { recursive: true }); }
-    else { proj.music = { file: "src/assets/score.wav", start: 0, gain_db: 0 }; proj.transition_whoosh = false; }
+    else { proj.music = "warm"; proj.transition_whoosh = false; }   // a generated bed until the user's track is added (studio_file_add, then music {file, start, gain_db})
   }
   fs.writeFileSync(path.join(d, "project.json"), JSON.stringify(proj, null, 2));
   let html = fs.readFileSync(path.join(SKILL, "template", "index.html"), "utf8");
@@ -39,7 +39,7 @@ function newProject(dir, opts) {
     fs.writeFileSync(path.join(d, f), fs.readFileSync(path.join(SKILL, "template", f), "utf8").replace(/\{\{NAME\}\}/g, proj.name));
   const steps = { narrated: `  1. studio budget ${dir}, then write the narration in project.json (scenes[].say)\n  2. studio voice ${dir}   3. studio audio ${dir}   (then studio words ${dir}, add events, studio audio again)`,
     footage: `  1. put clips in src/footage/ and list them in project.json "edit.clips" (src, in, out)\n  2. studio cut ${dir}   3. studio transcribe ${dir}   4. set scenes (start/end s of the edit)   5. studio audio ${dir}`,
-    film: `  1. put the music at src/assets/score.wav (the user's track or your own score script)\n  2. set scenes (start/end in seconds, e.g. one per bar)   3. studio audio ${dir}` }[mode];
+    film: `  1. music starts as the generated "warm" bed; for the user's track add it with studio_file_add and set "music": {"file": "src/assets/<song>", "start": 0, "gain_db": -3}\n  2. set scenes (start/end in seconds, e.g. one per bar)   3. studio audio ${dir}` }[mode];
   say(`New ${mode} project: ${d}  (${aspect}${plat ? ", " + plat : ""}, ${proj.length} s)\n  0. fill brief.md and shots.md (the plan) and get the user's OK\n${steps}\n  then: write src/index.html → studio stills ${dir} (look!) → studio render ${dir} → studio check ${dir}`);
 }
 

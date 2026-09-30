@@ -20,7 +20,7 @@ const INSTRUCTIONS = "Synergy Studio makes and improves videos. Call studio_guid
 
 const EXPECTED_TOOLS = [
   "studio_audio", "studio_beats", "studio_budget", "studio_check", "studio_compose", "studio_cut", "studio_doctor",
-  "studio_export", "studio_file_add", "studio_file_list", "studio_file_read", "studio_file_write", "studio_frames",
+  "studio_example", "studio_export", "studio_file_add", "studio_file_list", "studio_file_read", "studio_file_write", "studio_frames",
   "studio_guide", "studio_hyperframes", "studio_import_hyperframes", "studio_job_log", "studio_job_status",
   "studio_look_from", "studio_open", "studio_project_import", "studio_project_list", "studio_project_new",
   "studio_reference", "studio_reference_study", "studio_render", "studio_say", "studio_scenes", "studio_setup_start",
@@ -149,6 +149,18 @@ describe("empty tool home", () => {
     assert.equal(resource.contents[0].text, expected);
     const ref = await client.callTool({ name: "studio_reference", arguments: { name: "review" } });
     assert.match(textOf(ref), /\S/);
+  });
+
+  test("studio_example reads only examples and templates", async () => {
+    const ok = await client.callTool({ name: "studio_example", arguments: { path: "template/sketch.js" } });
+    assert.equal(textOf(ok), fs.readFileSync(path.join(SKILL, "template", "sketch.js"), "utf8"));
+    const page = await client.callTool({ name: "studio_example", arguments: { path: "examples/three-product/src/index.html" } });
+    assert.notEqual(page.isError, true);
+    for (const p of ["SKILL.md", "../SKILL.md", "examples/../SKILL.md", "scripts/studio.mjs", "/etc/hosts", "examples", "template/none.js"]) {
+      const r = await client.callTool({ name: "studio_example", arguments: { path: p } });
+      assert.equal(r.isError, true, p);
+      assert.match(textOf(r), /template\/sketch\.js/, `${p} lists the available files`);
+    }
   });
 
   test("before setup: doctor says not set up, other tools say so plainly", async () => {
@@ -373,6 +385,11 @@ describe("installed tool home, temporary projects home", { skip: installed ? fal
     const opened = await client.callTool({ name: "studio_open", arguments: { name: "plain-hf" } });
     assert.match(textOf(opened), /plain-hf\.mp4/);
     assert.match(textOf(opened), /file:\/\//);
+    assert.doesNotMatch(textOf(opened), /share copy/);
+    fs.copyFileSync(path.join(projects, "plain-hf", "out", "plain-hf.mp4"), path.join(projects, "plain-hf", "out", "plain-hf-share.mp4"));
+    const withShare = textOf(await client.callTool({ name: "studio_open", arguments: { name: "plain-hf" } }));
+    assert.match(withShare, /Full render: .*plain-hf\.mp4\n/);
+    assert.match(withShare, /Smaller share copy: .*plain-hf-share\.mp4/);
 
     const check = await waitForJob(client, jobId(await client.callTool({ name: "studio_check", arguments: { name: "plain-hf" } })));
     console.log(textOf(check));
@@ -409,6 +426,8 @@ describe("installed tool home, temporary projects home", { skip: installed ? fal
     assert.notEqual(say.isError, true, textOf(say));
     assert.ok(fs.existsSync(path.join(projects, "pic-check", "audio", "say.wav")));
     assert.match(textOf(say), /say\.wav/);
+    assert.match(textOf(say), /file:\/\/.*say\.wav/);
+    assert.ok(textOf(say).includes(path.join(projects, "pic-check", "audio", "say.wav")));
   });
 
   test("footage tools: import, reference study, silences, scenes, look card", { timeout: 300000 }, async () => {

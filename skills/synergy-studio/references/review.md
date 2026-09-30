@@ -45,10 +45,10 @@ an AVOID line in feedback.md. If you can start a fresh sub-agent, give it only t
 15. ◇ Captions exist for speech (footage and social videos) and their words match what is said.
 16. ◇ Motion in every scene; no accidental overlaps; text and UI elements (titles, captions, logo) keep their places.
 17. ⛔ Voice is clear over music; no clipped words at joins. You cannot listen, so check: the mix ducks music
-    under voice (audio.py does), footage joins fall in silences (`studio silences` on `audio/voice.wav` shows a
-    pause at each cut in `cuts.json`), and `studio check` shows no clipping or loudness failure.
+    under voice (`studio_audio` does), footage joins fall in silences (`studio_silences` on `audio/voice.wav` shows a
+    pause at each cut in `cuts.json`), and `studio_check` shows no clipping or loudness failure.
 
-## Specification (`studio check` measures these)
+## Specification (`studio_check` measures these)
 18. ⛔ Format, size and frame rate match the platform; duration matches the timeline ± 0.15 s and is
     at most the target `length` × 1.05.
 19. ⛔ Loudness −14 ±1 LUFS, true peak ≤ −1 dBTP; no black or frozen stretches.
@@ -63,5 +63,5 @@ an AVOID line in feedback.md. If you can start a fresh sub-agent, give it only t
 22. ⛔ Paid or gifted appearances carry a disclosure ("Paid partnership" / "Ad").
 23. ⛔ "Illustrative example" is shown on any proof shot that is not a real documented result.
 
-Write each round in feedback.md: `## <date> gate round <n>` and the FALSE conditions with evidence
+Write each round in feedback.md (read it with `studio_file_read` first and write back the whole file): `## <date> gate round <n>` and the FALSE conditions with evidence
 (the exact frame time, the exact word, the exact measurement).

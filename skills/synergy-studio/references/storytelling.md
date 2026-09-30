@@ -23,9 +23,9 @@ A question the viewer feels ("Tired by 3 p.m.?"), a surprising fact with a sourc
 
 ## Script rules
 - Short spoken sentences (under 15 words). Numbers written as they are said: "ninety percent".
-- About 2.5–3.3 words per second with Kokoro at speed 0.95–1.05; `studio voice` prints it per line.
+- About 2.5–3.3 words per second with Kokoro at speed 0.95–1.05; `studio_voice` prints it per line.
   Over 3.5 feels rushed: cut words rather than raising speed; for a premium feel lower the speed (0.85–0.9) and
-  write fewer words. `studio budget <dir>` gives the word count per scene for the target length.
+  write fewer words. `studio_budget` gives the word count per scene for the target length.
 - Budget (narration only; pauses between scenes take the rest, see SKILL.md step 3): 9:16 social with the
   default pauses: 15 s ≈ 30 words · 30 s ≈ 65 · 60 s ≈ 140. 16:9 explainers (slower pauses): 60 s ≈ 120 · 90 s ≈ 190.
 - One idea per scene. Scene length 3–8 s; social videos change something on screen every 1–2 s.
@@ -35,7 +35,7 @@ A question the viewer feels ("Tired by 3 p.m.?"), a surprising fact with a sourc
 ## Show what you say
 Each noun or claim in the narration appears on screen within about a third of a second of being said:
 use `events` in project.json at the word's offset (estimate: character position ÷ total characters ×
-line duration, or `studio words` then read `transcript.json`). Numbers count up; lists stagger in;
+line duration, or `studio_words` then read `transcript.json` with `studio_file_read`). Numbers count up; lists stagger in;
 comparisons split the screen.
 
 ## Truth
