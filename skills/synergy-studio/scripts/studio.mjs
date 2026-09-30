@@ -10,7 +10,7 @@ const HELP = `Synergy Studio (lite): videos written as HTML + GSAP (+ SVG, canva
 Usage: node <skill>/scripts/studio.mjs <command> [args]. Full reference: references/commands.md. Tool home: ${H}
 Modes (project.json "mode"): narrated (voice sets the timing) · footage (your clips, studio cut) · film (wordless, your music, scenes in seconds)
  once
-  setup                     one-time install (HyperFrames + Chrome, Kokoro voice, ffmpeg; about 1.1 GB)
+  setup [--whisper-model f]  one-time install (HyperFrames + Chrome, Kokoro voice, ffmpeg; about 1.1 GB) + captions (Whisper, about 0.5 GB)
   doctor [--full]           check the install (--full also test renders a 60 fps and a three.js page)
   synctest                  picture against sound for the whole pipeline, once per computer (setup runs it)
  every video

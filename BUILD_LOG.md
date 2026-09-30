@@ -227,3 +227,23 @@ footage-captions at 12.1 s differs by 1.97 (limit 1.0): the same picture shifted
 side by side), accepted as the corrected result. `baseline/after-L5` is the new baseline.
 Gap named: T4's onset snapping was developed with the T4 fixture in view; real speech has no ground truth here.
 T0, T3, T4, T6, T7s: PASS. L5: PASS.
+
+## Merge of the owner's commit 3543ba7 (base 30127c8)
+
+The owner's branch moved during L5 to `3543ba7` ("close open items: captions setup + doctor, beat at 0 s"). Three way
+merge with `30127c8` as the ancestor: `beats.py` taken whole (a beat right at 0 s is kept; our copy was unchanged);
+his captions setup merged into our split modules by implementer A (setup step 8 fetches `ggml-small.en.bin`, pinned by
+size 487614201 and SHA-256 `c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d`, non fatal on failure;
+`setup --whisper-model <file>` installs a model downloaded elsewhere; doctor shows `whisper model` as PASS or WARN) and
+his transcribe hints by implementer D (the failure names the missing program or model). Kept ours where both changed:
+whisper-cli is built from source inside the tool home, and nothing ever runs or suggests brew. His SKILL.md and
+references changes are taken in at L7. His LITE.md change records closed items only.
+Retests (evidence L5-merge-beats, T1-2026-09-30-5):
+```
+pytest tests/test_beats.py: 6 passed; beats on a 120 BPM click track with a click at 0 s: first beats [0.0, 0.491, 0.991, 1.491]
+T1: ℹ tests 29 ℹ pass 29; tmp home "tmp/home test": 1/10 to 10/10 done, real 126.72 (includes the Whisper model download
+and the synctest at the end); doctor --full exit=0, every line PASS incl. "PASS whisper model: ..." and "PASS synctest:
+last result: mean offset 0 ms"; 2.1G; second setup all 10 "already done", real 6.56; ffprobe falsifier exit=2;
+default home: doctor --full exit=0 all PASS; second setup all "already done"
+```
+The base is now `3543ba7`.

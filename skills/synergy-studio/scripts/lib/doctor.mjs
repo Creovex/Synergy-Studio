@@ -14,7 +14,7 @@ import { MIN_FREE_BYTES, freeDiskBytes, isInside, toolHome } from "./paths.mjs";
 import { loadEnv, toolEnv } from "./env.mjs";
 import { run, runHyperframes, runPython, sha256File } from "./run.mjs";
 import { withHeavyLock } from "./lock.mjs";
-import { MODELS, NPM_PACKAGES, PINS, WHISPER, binaryArch, readWhisperInfo } from "./setup.mjs";
+import { MODELS, NPM_PACKAGES, PINS, WHISPER, WHISPER_MODEL, WHISPER_MODEL_FIX, binaryArch, readWhisperInfo } from "./setup.mjs";
 
 export const USAGE = "doctor [--full]  checks the installation; --full also test renders a 60 fps page and a three.js page";
 
@@ -25,11 +25,11 @@ const RENDER_TIMEOUT_MS = 240000;
 const LOOKS_LIKE_CONTENT_YMAX = 80;
 
 const PASS = (check, detail) => ({ status: "PASS", check, detail });
-const WARN = (check, detail) => ({ status: "WARN", check, detail });
+const WARN = (check, detail, fix) => ({ status: "WARN", check, detail, fix });
 const FAIL = (check, detail, fix) => ({ status: "FAIL", check, detail, fix });
 
 function formatLine(r) {
-  return r.status === "FAIL" ? `FAIL ${r.check}: ${r.detail}. Fix: ${r.fix}` : `${r.status} ${r.check}: ${r.detail}`;
+  return r.fix ? `${r.status} ${r.check}: ${r.detail}. Fix: ${r.fix}` : `${r.status} ${r.check}: ${r.detail}`;
 }
 
 const firstLine = (text) => (text ?? "").trim().split("\n")[0] ?? "";
@@ -109,6 +109,16 @@ async function browserCheck(env) {
   const r = await run(file, ["--version"], { env: toolEnv(env), timeoutMs: 30000 });
   if (r.code !== 0) return FAIL("render browser", `does not start (${lastLines(r, 1)})`, SETUP_AGAIN);
   return PASS("render browser", `${firstLine(r.stdout)} at ${file}`);
+}
+
+// WARN, not FAIL: only transcribing speech needs the model.
+async function whisperModelCheck(env) {
+  const file = path.join(env.hf_home, ".cache", "hyperframes", "whisper", "models", WHISPER_MODEL.name);
+  if (!fs.existsSync(file)) return WARN("whisper model", `missing (${file})`, WHISPER_MODEL_FIX);
+  if (fs.statSync(file).size !== WHISPER_MODEL.size || (await sha256File(file)) !== WHISPER_MODEL.sha256) {
+    return WARN("whisper model", `${file} has the wrong size or checksum`, WHISPER_MODEL_FIX);
+  }
+  return PASS("whisper model", file);
 }
 
 async function whisperCheck(env) {
@@ -266,6 +276,7 @@ export async function runDoctor({ home = toolHome(), full = false, log = console
   emit(await safely("hyperframes", () => versionCheck("hyperframes", env.node, [env.hyperframes, "--version"], te, NPM_PACKAGES.hyperframes, firstLine, env.hyperframes)));
   emit(await safely("render browser", () => browserCheck(env)));
   emit(await safely("whisper", () => whisperCheck(env)));
+  emit(await safely("whisper model", () => whisperModelCheck(env)));
   emit(diskCheck(home));
   if (full) {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "synergy-doctor-"));

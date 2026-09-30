@@ -68,6 +68,7 @@ export function venvPython(home) {
 
 // Every absolute path inside a tool home. Keys:
 //   home, runtime, nodeDir, nodeBin, npmCli, uvDir, uvBin, nodeProject (the npm project folder),
+//   whisperModel (ggml-small.en.bin in the HyperFrames cache),
 //   nodeModules, hyperframesMjs, hfHome (the folder HyperFrames sees as its home: its browser, config and
 //   model caches live there), venv, python, models, modelFile, voicesFile, bin, ffmpeg, ffprobe,
 //   cmake (in the venv), whisperDir, whisperBin (whisper-cli), whisperInfo (build record), envJson, jobs, locks, heavyLock, serverLog, tmp
@@ -92,6 +93,7 @@ export function layout(home) {
     nodeModules: path.join(nodeProject, "node_modules"),
     hyperframesMjs: path.join(nodeProject, "node_modules", "hyperframes", "bin", "hyperframes.mjs"),
     hfHome: path.join(nodeProject, "hf-home"),
+    whisperModel: path.join(nodeProject, "hf-home", ".cache", "hyperframes", "whisper", "models", "ggml-small.en.bin"),
     venv: path.join(home, "venv"),
     python: venvPython(home),
     models,

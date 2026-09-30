@@ -182,7 +182,7 @@ test("transcribe stops with the fix when whisper is not installed, but still imp
   const dir = scratch("transcribe none"); project(dir, { name: "t", mode: "footage" });
   const a = path.join(dir, "a.wav"); wav(a, 1, 300);
   const r = studio(["transcribe", dir, a], home);
-  assert.equal(r.status, 1); assert.match(r.stderr, /Whisper is not installed/); assert.match(r.stderr, /setup/); noStack(r.stderr);
+  assert.equal(r.status, 1); assert.match(r.stderr, /the whisper-cli program is missing/); assert.match(r.stderr, /setup/); assert.match(r.stderr, /studio doctor shows what captions need/); assert.doesNotMatch(r.stderr, /brew/i); noStack(r.stderr);
   const srt = path.join(dir, "c.srt"); fs.writeFileSync(srt, "1\n00:00:00,500 --> 00:00:02,000\nHello there\n");
   const i = studio(["transcribe", dir, srt], home);
   assert.equal(i.status, 0, i.stderr);
@@ -299,4 +299,17 @@ test("refineWords moves a start that sits in the silence before its word, or lat
   assert.deepEqual(refineWords(words, flat), words);
   const quiet = refineWords([{ text: "a", start: 1.2, end: 1.4 }, { text: "b", start: 1.6, end: 1.7 }], levels);   // starts in a pause but the word's interval ends before the next sound: kept
   assert.equal(quiet[1].start, 1.6);
+});
+
+test("transcribe names the missing Whisper model and how to get it, never brew", async () => {
+  const { missingPart } = await lib("transcribe.mjs");
+  const home = scratch("model"), bin = path.join(home, "whisper-cli"); fs.writeFileSync(bin, "");
+  const e = { whisper: { available: true, path: bin }, hf_home: home };
+  const m = missingPart(e, "proj");
+  assert.match(m, /the Whisper model is missing \(.*ggml-small\.en\.bin\)/);
+  assert.match(m, /setup\s+to download it/); assert.match(m, /huggingface\.co\/ggerganov\/whisper\.cpp\/resolve\/main\/ggml-small\.en\.bin/);
+  assert.match(m, /setup --whisper-model <that file>/); assert.match(m, /studio transcribe proj subs\.srt/); assert.doesNotMatch(m, /brew/i);
+  const dir = path.join(home, ".cache", "hyperframes", "whisper", "models"); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, "ggml-small.en.bin"), "");
+  assert.equal(missingPart(e, "proj"), "");
+  assert.match(missingPart({ ...e, whisper: { available: true, path: path.join(home, "nope") } }, "proj"), /whisper-cli program is missing \(.*nope\)/);
 });

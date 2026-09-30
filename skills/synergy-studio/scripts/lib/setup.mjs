@@ -25,7 +25,7 @@ import { saveEnv, loadEnv, toolEnv } from "./env.mjs";
 import { run, runHyperframes, runPython, download, sha256File } from "./run.mjs";
 import { withHeavyLock } from "./lock.mjs";
 
-export const USAGE = "setup  installs the tools (about 1 GB, once); run it again to repair";
+export const USAGE = "setup [--whisper-model f]  installs the tools (about 1.5 GB, once); run it again to repair; --whisper-model copies a downloaded Whisper model file into place";
 
 const SCRIPTS_DIR = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const LOCK_FILE = path.join(SCRIPTS_DIR, "requirements.lock");
@@ -80,6 +80,15 @@ export const WHISPER = {
   url: `https://github.com/ggml-org/whisper.cpp/archive/refs/tags/${WHISPER_TAG}.tar.gz`,
   sha256: "57e280cee375ab02425b806ad5146b99f6eb9357e3c2b31357c8a6af2e2e44ae",
 };
+
+// The Whisper model HyperFrames' transcribe loads from its cache under the tool home (small.en, English).
+export const WHISPER_MODEL = {
+  name: "ggml-small.en.bin",
+  url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
+  size: 487614201,
+  sha256: "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
+};
+export const WHISPER_MODEL_FIX = `download ${WHISPER_MODEL.url} on any machine and run: setup --whisper-model <that file>. Without it, only transcribing speech is unavailable (import captions with a .srt file instead)`;
 
 const MODEL_BASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/";
 export const MODELS = [
@@ -497,6 +506,39 @@ function chromeVersion(browserPath) {
   return match ? match[1] : null;
 }
 
+// Copies a model file downloaded elsewhere into the cache after checking its size and SHA-256.
+export async function installWhisperModel(file, dest) {
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new Error(`Whisper model file not found: ${file}`);
+  if (fs.statSync(file).size !== WHISPER_MODEL.size || (await sha256File(file)) !== WHISPER_MODEL.sha256) {
+    throw new Error(`${file} is not ${WHISPER_MODEL.name} (wrong size or checksum); download ${WHISPER_MODEL.url} again`);
+  }
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const part = `${dest}.part`;
+  fs.copyFileSync(file, part);
+  fs.renameSync(part, dest);
+}
+
+// Not fatal: only transcribing speech needs the model, so a failure prints a WARN and setup goes on.
+const stepWhisperModel = {
+  name: `Whisper model ${WHISPER_MODEL.name} (for transcribing speech)`,
+  async done({ L }) {
+    return modelOk(L.whisperModel, WHISPER_MODEL);
+  },
+  async run({ L, options }) {
+    try {
+      if (options.whisperModel) {
+        await installWhisperModel(options.whisperModel, L.whisperModel);
+        return;
+      }
+      await download(WHISPER_MODEL.url, L.whisperModel, {
+        size: WHISPER_MODEL.size, sha256: WHISPER_MODEL.sha256, log: say, onProgress: progressPrinter(WHISPER_MODEL.name),
+      });
+    } catch (error) {
+      say(`   WARN the Whisper model is not installed (${error.message}). Fix: ${WHISPER_MODEL_FIX}. Setup continues.`);
+    }
+  },
+};
+
 const stepBrowser = {
   name: "render browser for HyperFrames",
   async done({ L, previous }) {
@@ -557,15 +599,19 @@ const stepEnvJson = {
   },
 };
 
-const STEPS = [stepNode, stepUv, stepNpm, stepVenv, stepModels, stepBinaries, stepWhisper, stepBrowser, stepEnvJson];
+const STEPS = [stepNode, stepUv, stepNpm, stepVenv, stepModels, stepBinaries, stepWhisper, stepWhisperModel, stepBrowser, stepEnvJson];
 
 // ---------------------------------------------------------------- command
 
 function parseArgs(argv) {
-  const options = { relock: false };
-  for (const arg of argv) {
+  const options = { relock: false, whisperModel: null };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
     if (arg === "--relock") options.relock = true;
-    else throw new Error(`setup does not know "${arg}". Usage: setup [--relock]`);
+    else if (arg === "--whisper-model") {
+      options.whisperModel = argv[++i] ?? null;
+      if (!options.whisperModel || options.whisperModel.startsWith("--")) throw new Error("--whisper-model needs the model file. Usage: setup [--whisper-model <file>]");
+    } else throw new Error(`setup does not know "${arg}". Usage: setup [--relock] [--whisper-model <file>]`);
   }
   return options;
 }
@@ -597,10 +643,19 @@ async function runSteps(home, options) {
   fs.rmSync(L.tmp, { recursive: true, force: true });
 }
 
+function isSetUp(home) {
+  try { loadEnv(home); return true; } catch { return false; }
+}
+
 export async function main(argv) {
   const options = parseArgs(argv);
   const home = toolHome();
   say(`Tool home: ${home}`);
+  if (options.whisperModel && isSetUp(home)) {
+    await installWhisperModel(options.whisperModel, layout(home).whisperModel);
+    say(`Whisper model installed: ${layout(home).whisperModel}`);
+    return 0;
+  }
   checkDisk(home);
   fs.mkdirSync(home, { recursive: true });
   return withHeavyLock(home, "setup", async () => {

@@ -43,13 +43,24 @@ function soundProblem(e, file) {
   return null;
 }
 
-function hfFailure(r, dir) {
+const MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${MODEL}.bin`;
+
+// which part transcription needs is missing, with our paths and the fix; "" when both are there
+export function missingPart(e, dir) {
+  const bin = e.whisper?.path, model = path.join(e.hf_home, ".cache", "hyperframes", "whisper", "models", `ggml-${MODEL}.bin`);
+  const setup = `node "${path.join(SKILL, "scripts", "studio.mjs")}" setup`, srt = `import captions instead: studio transcribe ${dir} subs.srt`;
+  if (!e.whisper?.available || !bin || !fs.existsSync(bin))
+    return `the whisper-cli program is missing${bin ? ` (${bin})` : ""}. Run  ${setup}  to build it (it needs the Xcode command line tools for the compiler), or ${srt}`;
+  if (!fs.existsSync(model))
+    return `the Whisper model is missing (${model}). Run  ${setup}  to download it, or download ${MODEL_URL} on any computer and run  ${setup} --whisper-model <that file> , or ${srt}`;
+  return "";
+}
+
+function hfFailure(r, e, dir) {
   let j = null; try { j = JSON.parse((r.stdout || "").trim().split("\n").pop()); } catch { /* not JSON: use the raw text */ }
-  if (j?.reason === "whisper_unavailable") return "HyperFrames could not start Whisper. Run studio setup again to rebuild it.";
-  const text = (j?.error || r.stderr || r.stdout || `HyperFrames exited with ${r.status}`).toString().trim().slice(-600);
-  const net = /ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|getaddrinfo|huggingface|download/i.test(text)
-    ? `\n(The first run downloads the Whisper ${MODEL} model, about ${MODEL_MB} MB, from huggingface.co and needs internet once. Without internet, import captions instead: studio transcribe ${dir} my.srt)` : "";
-  return `transcribe failed: ${text}${net}`;
+  const text = (j?.reason === "whisper_unavailable" ? "HyperFrames could not start Whisper" : (j?.error || r.stderr || r.stdout || `HyperFrames exited with ${r.status}`)).toString().trim().slice(-600);
+  const part = missingPart(e, dir);
+  return `transcribe failed: ${text}${part ? `\n${part[0].toUpperCase()}${part.slice(1)}` : ""}\n(studio doctor shows what captions need)`;
 }
 
 async function transcribe(dir, media) {
@@ -58,7 +69,7 @@ async function transcribe(dir, media) {
   const src = media ? needProjectFile(d, media, "file") : path.join(d, "audio", "voice.wav");
   const imported = IMPORT_EXT.includes(path.extname(src).toLowerCase());
   if (!imported) {
-    if (!e.whisper?.available) die(`Whisper is not installed on this computer, so words cannot be timed. Run  node "${path.join(SKILL, "scripts", "studio.mjs")}" setup  (it builds Whisper), or import captions: studio transcribe ${dir} my.srt`);
+    if (!e.whisper?.available) die(`words cannot be timed: ${missingPart(e, dir)}\n(studio doctor shows what captions need)`);
     const bad = soundProblem(e, src); if (bad) die(bad);
   }
   const run1 = () => {
@@ -69,7 +80,7 @@ async function transcribe(dir, media) {
       const args = ["transcribe", src, "-d", scratch, "--json", ...(imported ? [] : ["--engine", "whisper", "-m", MODEL])];
       const r = hf(e, args, { capture: true, soft: true });
       const out = path.join(scratch, "transcript.json");
-      if (r.status !== 0 || !fs.existsSync(out)) die(hfFailure(r, dir));
+      if (r.status !== 0 || !fs.existsSync(out)) die(hfFailure(r, e, dir));
       const entries = readJSON(out), words = imported ? entries : refineWords(toWords(entries), frameLevels(e.ffmpeg, src));
       if (!words.length) die(`no words found in ${path.basename(src)}. Whisper heard no speech; check that the audio has a voice in it.`);
       fs.writeFileSync(path.join(d, "transcript.json"), JSON.stringify(words, null, 1));

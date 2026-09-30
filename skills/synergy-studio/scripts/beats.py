@@ -37,17 +37,18 @@ grid = np.arange(70, 180.01, 0.25)
 scores = np.array([comb(b)[0] for b in grid])
 bpm = float(grid[np.argmax(scores)])
 # octave check: a grid at double tempo that is nearly as strong means the true beat is the faster one
-for f in (2.0, 0.5):
-    b2 = bpm * f
-    if 70 <= b2 <= 180 and comb(b2)[0] > 0.85 * comb(bpm)[0] and f == 2.0:
-        bpm = b2
+b2 = bpm * 2
+if b2 <= 180 and comb(b2)[0] > 0.85 * comb(bpm)[0]:
+    bpm = b2
 sc, ph = comb(bpm)
 per = fps * 60 / bpm
 LAG = 0.074   # onset frames report each hit early (window centre + flux diff); measured on a synthetic 118 BPM track
 per_s = per / fps
 first = ph / fps + LAG
 first -= per_s * np.floor(first / per_s)          # earliest beat at or after 0
-beats = np.arange(first, len(x) / SR, per_s)
+if first - per_s > -0.06:                          # a hit right at the start is measured a few ms early: keep it (at 0)
+    first -= per_s
+beats = np.maximum(0, np.arange(first, len(x) / SR, per_s))
 strength = [env[min(len(env) - 1, int(round((b - LAG) * fps)))] for b in beats[:4]]
 d0 = int(np.argmax(strength)) if strength else 0
 out = {"song": song, "start": start, "bpm": round(float(bpm), 2),

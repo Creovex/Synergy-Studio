@@ -374,3 +374,23 @@ test("whisper pin: tag, tarball address and the cmake pin are in the lock", asyn
   const lock = fs.readFileSync(path.join(SCRIPTS, "requirements.lock"), "utf8");
   assert.ok(lock.includes(`cmake==${setup.CMAKE_VERSION}`));
 });
+
+test("whisper model pin and cache path", async () => {
+  const { WHISPER_MODEL } = await lib("setup.mjs");
+  const { layout } = await import(pathToFileURL(path.join(SCRIPTS, "lib", "paths.mjs")).href);
+  assert.equal(WHISPER_MODEL.size, 487614201);
+  assert.match(WHISPER_MODEL.sha256, /^[0-9a-f]{64}$/);
+  assert.match(WHISPER_MODEL.url, /^https:\/\/huggingface\.co\/ggerganov\/whisper\.cpp\/resolve\/main\/ggml-small\.en\.bin$/);
+  assert.equal(layout("/h").whisperModel, path.join("/h", "node", "hf-home", ".cache", "hyperframes", "whisper", "models", "ggml-small.en.bin"));
+});
+
+test("--whisper-model refuses a file that is not the pinned model and copies nothing", async () => {
+  const { installWhisperModel } = await lib("setup.mjs");
+  const dir = scratch();
+  const bad = path.join(dir, "bad.bin");
+  fs.writeFileSync(bad, "not a model");
+  const dest = path.join(dir, "cache", "ggml-small.en.bin");
+  await assert.rejects(() => installWhisperModel(bad, dest), /not ggml-small\.en\.bin/);
+  await assert.rejects(() => installWhisperModel(path.join(dir, "missing.bin"), dest), /not found/);
+  assert.equal(fs.existsSync(dest), false);
+});
