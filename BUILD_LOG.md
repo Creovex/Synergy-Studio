@@ -308,3 +308,32 @@ T17: Manifest schema validation passes!; smoke test: the unpacked server answere
      size: 251886 bytes, 86 files
 ```
 T0, T14, T17: PASS. L7: PASS.
+
+## L8: Claude Code live
+
+Install (commands from `research/claude-code-plugins.md`), literal:
+```
+$ claude plugin marketplace add "<repo>" --scope user
+Adding marketplace…✔ Successfully added marketplace: synergy-local (declared in user settings)
+$ claude plugin install synergy-studio@synergy-local --scope user
+Installing plugin "synergy-studio@synergy-local"...✔ Successfully installed plugin: synergy-studio@synergy-local (scope: user)
+```
+The installed plugin's tools are named `mcp__plugin_synergy-studio_synergy-studio__<tool>` (recorded from the session init:
+36 tools, server `plugin:synergy-studio:synergy-studio` connected). Claude Code copies a folder marketplace into its plugin
+cache, so a code change needs a reinstall.
+Runs: `claude -p "<prompt>" --model sonnet --allowedTools "mcp__plugin_synergy-studio_synergy-studio__*" --disallowedTools
+"Bash,Edit,Write" --permission-mode dontAsk --output-format stream-json --verbose --max-turns 120`; the orchestrator then ran
+`check` on each project itself (evidence T16, T16b):
+```
+T16  "Use Synergy Studio to make a 15 second 9:16 video about drinking water before coffee"
+     first studio calls: studio_guide, studio_doctor, studio_project_new ...; calls to Bash, Edit or Write: 0; 38 turns
+     check: 10 lines PASS (h264 1080x1920 30/1, 30 fps, aac, 14.20 s, target 15 s, -14 LUFS, -1.5 dBTP, no black,
+     nothing frozen, audio against mix lag 0 ms correlation 0.999) exit=0
+     falsifier, plugin disabled: init synergy tools 0; "I haven't made the video yet"; MP4 files before=2 after=2
+T16b "Use Synergy Studio to improve this video: add word captions and an end card" (raw clip c1)
+     studio_guide first; studio_project_import, studio_transcribe, studio_cut, studio_audio, studio_stills, studio_render,
+     studio_check, studio_open; calls to Bash, Edit or Write: 0; 36 turns
+     check: 11 lines PASS incl. "captions: 31 transcript words all in out/captions.json" exit=0; the final sheet shows
+     word captions and an end card
+```
+T16, T16b: PASS. L8: PASS.
