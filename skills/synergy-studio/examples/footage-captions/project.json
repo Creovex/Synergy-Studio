@@ -1,0 +1,12 @@
+{
+  "name": "face-card-test", "mode": "footage", "aspect": "9:16", "fps": 30,
+  "music": "upbeat",
+  "edit": {"grade": "warm", "clean_voice": true, "clips": [
+    {"src": "src/footage/clip.mp4", "in": 16.5, "out": 24.3},
+    {"src": "src/footage/clip.mp4", "in": 0.7, "out": 5.9}
+  ]},
+  "caption_fixes": {"synergy studio": "Synergy Studio"},
+  "scenes": [ {"id": "s1", "start": 0, "end": 7.8}, {"id": "s2", "start": 7.8, "end": 13.0} ],
+  "events": {"s1": {"q": {"t": 1.6, "sfx": "pop"}}, "s2": {"logo": {"t": 0.3, "sfx": "click"}}},
+  "transition_whoosh": true
+}

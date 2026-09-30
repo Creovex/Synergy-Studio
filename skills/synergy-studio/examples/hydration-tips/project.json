@@ -1,0 +1,24 @@
+{
+  "name": "hydration-tips",
+  "aspect": "9:16",
+  "platform": "tiktok",
+  "fps": 30,
+  "voice": "af_heart",
+  "speed": 1.0,
+  "music": "upbeat",
+  "lead": 0.8, "pre": 0.5, "post": 1.1, "tail": 2.0,
+  "lexicon": {},
+  "scenes": [
+    {"id": "s1", "say": "Tired by three p.m.? You might just be thirsty."},
+    {"id": "s2", "say": "Tip one: drink a full glass of water when you wake up."},
+    {"id": "s3", "say": "Tip two: keep a bottle where you can see it. Out of sight really is out of mind."},
+    {"id": "s4", "say": "Tip three: eat your water. Cucumber and watermelon are over ninety percent water."},
+    {"id": "s5", "say": "Small sips, all day. Follow for more simple health tips."}
+  ],
+  "events": {
+    "s2": {"glass": {"t": 1.2, "sfx": "pop"}},
+    "s3": {"bottle": {"t": 0.8, "sfx": "pop"}},
+    "s4": {"fruit1": {"t": 2.2, "sfx": "pop"}, "fruit2": {"t": 3.0, "sfx": "pop"}},
+    "s5": {"cta": {"t": 1.6, "sfx": "click"}}
+  }
+}

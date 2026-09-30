@@ -1,0 +1,52 @@
+<!doctype html>
+<!-- Synergy Studio composition SOURCE. `studio compose` fills the {{...}} placeholders from timing.json
+     and writes the render-ready copy to comp/index.html. Edit this file, never comp/index.html.
+     Rules (references/hyperframes.md): every element with data-start has a unique id; one .scene div
+     per scene id in project.json, with data-start="{{<id>.start}}" data-duration="{{<id>.dur}}";
+     animation only through the SS helpers / tl.to(); no Math.random, Date, setTimeout, CSS animations. -->
+<html><head><meta charset="UTF-8">
+<script src="gsap.min.js"></script>
+<script src="timing.js"></script>
+<script src="words.js"></script>
+<script src="lib.js"></script>
+<link rel="stylesheet" href="looks.css">
+<style>
+html,body{width:{{W}}px;height:{{H}}px}
+#root{width:{{W}}px;height:{{H}}px}
+/* scene-specific styles go here */
+</style></head>
+<body>
+<div id="root" data-look="paper" data-composition-id="main" data-width="{{W}}" data-height="{{H}}" data-fps="{{FPS}}" data-duration="{{TOTAL}}">
+
+  <div id="s1" class="scene clip" data-start="{{s1.start}}" data-duration="{{s1.dur}}" data-track-index="1">
+    <div id="s1title" class="abs h1" style="left:0;right:0;top:40%;text-align:center;font-size:140px">Your title</div>
+    <div id="s1sub" class="abs muted" style="left:0;right:0;top:50%;text-align:center;font-size:44px">One clear promise.</div>
+  </div>
+
+  <div id="s2" class="scene clip" data-start="{{s2.start}}" data-duration="{{s2.dur}}" data-track-index="2">
+    <div class="step"><b>1</b><span>First point</span></div>
+    <div id="s2card" class="abs card" style="left:8%;top:30%;width:72%;padding:48px;font-size:40px">Show what the narration says.</div>
+  </div>
+
+  <div id="s3" class="scene clip" data-start="{{s3.start}}" data-duration="{{s3.dur}}" data-track-index="3">
+    <div id="s3end" class="abs h1" style="left:0;right:0;top:42%;text-align:center;font-size:110px">Call to action.</div>
+  </div>
+
+  <audio id="mix" src="audio/mix.wav" data-start="0" data-duration="{{TOTAL}}" data-track-index="99"></audio>
+</div>
+<script>
+(function () {
+  const {tl, T, V, S, at, rise, pop, press, pick, count, drawIn, stagger, kenburns, punch, captions, finish} = SS.start();
+  // s1
+  // the hook is on screen from frame 1 (no fade or rise); it breathes with a slow push, the promise follows
+  tl.to("#s1title", {scale: 1.04, duration: T.s1.dur, ease: "none"}, 0); rise("#s1sub", V("s1", 0.6));
+  // s2
+  rise("#s2card", V("s2", 0.2));
+  // s3
+  pop("#s3end", V("s3", 0.2));
+  // captions({highlight: "var(--accent)"});   // word captions: run `studio words <dir>` (narrated) or `studio transcribe` (footage) first
+  finish();
+  window.__timelines = window.__timelines || {}; window.__timelines["main"] = tl;
+})();
+</script>
+</body></html>

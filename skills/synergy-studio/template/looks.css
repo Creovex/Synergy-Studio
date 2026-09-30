@@ -1,0 +1,54 @@
+/* Synergy Studio looks. Pick one with <div id="root" data-look="paper|midnight|bold">.
+   Use only these variables for colour and type, so a look change restyles the whole video. */
+@font-face{font-family:Inter;src:url(fonts/inter-latin-400-normal.woff2) format("woff2");font-weight:400}
+@font-face{font-family:Inter;src:url(fonts/inter-latin-500-normal.woff2) format("woff2");font-weight:500}
+@font-face{font-family:Inter;src:url(fonts/inter-latin-600-normal.woff2) format("woff2");font-weight:600}
+@font-face{font-family:Inter;src:url(fonts/inter-latin-700-normal.woff2) format("woff2");font-weight:700}
+@font-face{font-family:Manrope;src:url(fonts/manrope-latin-700-normal.woff2) format("woff2");font-weight:700}
+@font-face{font-family:"Cormorant Garamond";src:url(fonts/cormorant-garamond-latin-400-normal.woff2) format("woff2");font-weight:400}
+@font-face{font-family:"Cormorant Garamond";src:url(fonts/cormorant-garamond-latin-500-normal.woff2) format("woff2");font-weight:500}
+@font-face{font-family:"Cormorant Garamond";src:url(fonts/cormorant-garamond-latin-600-normal.woff2) format("woff2");font-weight:600}
+@font-face{font-family:"Cormorant Garamond";src:url(fonts/cormorant-garamond-latin-700-normal.woff2) format("woff2");font-weight:700}
+@font-face{font-family:Jost;src:url(fonts/jost-latin-300-normal.woff2) format("woff2");font-weight:300}
+@font-face{font-family:Jost;src:url(fonts/jost-latin-400-normal.woff2) format("woff2");font-weight:400}
+@font-face{font-family:Jost;src:url(fonts/jost-latin-500-normal.woff2) format("woff2");font-weight:500}
+@font-face{font-family:Manrope;src:url(fonts/manrope-latin-800-normal.woff2) format("woff2");font-weight:800}
+
+[data-look="paper"]{--bg:#F4F1EA;--bg2:#ECE7DC;--glow:#FBF9F4;--ink:#1E1D1B;--muted:#6B675F;--line:#DDD6C8;--card:#FFFFFF;
+  --accent:#D9775A;--accent2:#3E6FB0;--accent3:#2E7D6F;--accent4:#C9962F;--soft:#F3D5CA;--soft2:#D8E3F3;--soft3:#D3EAE4;--ok:#2E7D6F;--bad:#B5523B}
+[data-look="midnight"]{--bg:#07101F;--bg2:#040A17;--glow:#12264A;--ink:#EEF4FF;--muted:#8EA3C7;--line:#27406E;--card:#0F2140;
+  --accent:#35E0C4;--accent2:#2F7BFF;--accent3:#FFB547;--accent4:#FF4D5E;--soft:#12324A;--soft2:#132A52;--soft3:#123B3A;--ok:#35E0C4;--bad:#FF4D5E}
+[data-look="luxe"]{--bg:#0B0906;--bg2:#050403;--glow:#2A2114;--ink:#F4EDE1;--muted:#B5A88F;--line:#4A3E2A;--card:#16120C;
+  --accent:#C9A45C;--accent2:#E8D3A2;--accent3:#8C6D3F;--accent4:#F4EDE1;--soft:#2A2114;--soft2:#221B11;--soft3:#1B160E;--ok:#C9A45C;--bad:#B5523B}
+[data-look="bold"]{--bg:#FFE14D;--bg2:#FFD21F;--glow:#FFF3A8;--ink:#111111;--muted:#3D3A2E;--line:#111111;--card:#FFFFFF;
+  --accent:#FF3D6E;--accent2:#3D5AFE;--accent3:#00B386;--accent4:#111111;--soft:#FFD0DC;--soft2:#D6DCFF;--soft3:#C9F2E6;--ok:#00B386;--bad:#FF3D6E}
+
+#root{--cap-font:Manrope,sans-serif;--cap-weight:800}
+#root[data-look="luxe"]{--cap-font:Jost,sans-serif;--cap-weight:500}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);font-family:Inter,sans-serif;color:var(--ink);overflow:hidden}
+#root{position:relative;overflow:hidden;color:var(--ink);font-family:Inter,sans-serif;background:radial-gradient(1400px 900px at 30% 20%,var(--glow) 0%,var(--bg) 55%,var(--bg2) 100%)}
+.scene{position:absolute;inset:0;opacity:0}
+.abs{position:absolute}
+.h1{font-family:Manrope;font-weight:800;letter-spacing:-0.02em;line-height:1.05}
+.muted{color:var(--muted)}
+.serif{font-family:"Cormorant Garamond",serif;font-weight:500;letter-spacing:0}
+.tracked{font-family:Jost,sans-serif;font-weight:400;letter-spacing:.32em;text-transform:uppercase}
+[data-look="luxe"] #root, [data-look="luxe"]{font-family:Jost,sans-serif}
+[data-look="luxe"] .h1{font-family:"Cormorant Garamond",serif;font-weight:500;letter-spacing:0}
+.accent{color:var(--accent)}
+.card{background:var(--card);border:2px solid var(--line);border-radius:26px;box-shadow:0 18px 40px rgba(0,0,0,.10)}
+.chip{display:inline-flex;align-items:center;gap:10px;padding:14px 24px;border-radius:999px;border:2px solid var(--line);background:var(--card);color:var(--ink);font-size:28px;font-weight:600;white-space:nowrap}
+.lbl{font-size:24px;font-weight:600;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.step{position:absolute;left:96px;top:70px;display:flex;align-items:center;gap:18px;font-size:30px;font-weight:600;color:var(--muted)}
+.step b{display:inline-flex;width:54px;height:54px;border-radius:50%;background:var(--ink);color:var(--bg);align-items:center;justify-content:center;font-family:Manrope;font-size:28px}
+.step span{font-family:Manrope;font-weight:800;color:var(--ink);font-size:44px}
+.bubble{position:absolute;padding:22px 30px;border-radius:26px;font-size:30px;line-height:1.35}
+.bubble.user{background:var(--ink);color:var(--bg);border-bottom-right-radius:8px}
+.bubble.bot{background:var(--card);border:2px solid var(--line);border-bottom-left-radius:8px}
+.win{position:absolute;background:var(--card);border:2px solid var(--line);border-radius:28px;box-shadow:0 30px 70px rgba(0,0,0,.16);overflow:hidden}
+.win .bar{height:62px;background:var(--bg2);border-bottom:2px solid var(--line);display:flex;align-items:center;padding:0 26px;gap:12px}
+.win .bar i{width:16px;height:16px;border-radius:50%;background:var(--line)}
+.win .bar span{margin-left:18px;font-size:24px;font-weight:600;color:var(--muted)}
+/* vertical videos: keep the step label below the app's top bar (safe areas: references/design.md) */
+@media (max-aspect-ratio: 3/4){ .step{top:300px;left:80px} }   /* below every platform's top band (shorts 288 px) */

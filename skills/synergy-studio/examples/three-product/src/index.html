@@ -1,0 +1,43 @@
+<!doctype html>
+<html><head><meta charset="UTF-8">
+<script src="gsap.min.js"></script>
+<script src="timing.js"></script>
+<script src="words.js"></script>
+<script src="lib.js"></script>
+<link rel="stylesheet" href="looks.css">
+<script type="importmap">{"imports":{"three":"./three/three.module.js","three/addons/":"./three/addons/"}}</script>
+<style>html,body{width:{{W}}px;height:{{H}}px}#root{width:{{W}}px;height:{{H}}px}</style></head>
+<body>
+<div id="root" data-look="paper" data-composition-id="main" data-width="{{W}}" data-height="{{H}}" data-fps="{{FPS}}" data-duration="{{TOTAL}}">
+  <div id="s1" class="scene clip" data-start="{{s1.start}}" data-duration="{{s1.dur}}" data-track-index="1">
+    <canvas id="c3d" class="abs" width="{{W}}" height="{{H}}" style="left:0;top:0"></canvas>
+    <div id="lbl" class="abs card" style="left:1180px;top:420px;padding:28px 40px;font-size:40px;font-weight:700">Real 3D, <span class="accent">no Blender</span></div>
+  </div>
+  <audio id="mix" src="audio/mix.wav" data-start="0" data-duration="{{TOTAL}}" data-track-index="99"></audio>
+</div>
+<script type="module">
+import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+const {tl, T, at, S, pop, finish} = SS.start();
+const r = new THREE.WebGLRenderer({canvas: document.getElementById("c3d"), antialias: true, preserveDrawingBuffer: true, alpha: true});
+r.setPixelRatio(1); r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFShadowMap;
+r.toneMapping = THREE.ACESFilmicToneMapping; r.outputColorSpace = THREE.SRGBColorSpace;
+const sc = new THREE.Scene();
+sc.environment = new THREE.PMREMGenerator(r).fromScene(new RoomEnvironment(), 0.04).texture;
+const sun = new THREE.DirectionalLight(0xffffff, 2.0); sun.position.set(3, 6, 4); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sc.add(sun);
+const box = new THREE.Mesh(new RoundedBoxGeometry(1.6, 2.4, 0.9, 6, 0.12), new THREE.MeshStandardMaterial({color: 0xD9775A, roughness: 0.35}));
+box.castShadow = true; box.position.set(-1.2, 1.3, 0); sc.add(box);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShadowMaterial({opacity: 0.18}));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; sc.add(floor);
+const cam = new THREE.PerspectiveCamera(32, 16 / 9, 0.1, 100);
+const st = {t: 0}, t0 = T.s1.start, dur = T.s1.dur;
+function draw() { const u = st.t / dur; box.rotation.y = -0.6 + u * Math.PI * 1.2; box.position.y = 1.3 + 0.08 * Math.sin(u * Math.PI * 2);
+  cam.position.set(Math.sin(u * 0.6 - 0.3) * 7, 2.4, Math.cos(u * 0.6 - 0.3) * 7); cam.lookAt(0, 1.2, 0); r.render(sc, cam); }
+tl.to(st, {t: dur, duration: dur, ease: "none", onUpdate: draw}, t0);   // everything from the tween's time: deterministic
+draw();
+pop("#lbl", at("s1", "label"));
+finish();
+window.__timelines = window.__timelines || {}; window.__timelines["main"] = tl;
+</script>
+</body></html>

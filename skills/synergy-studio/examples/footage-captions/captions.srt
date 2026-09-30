@@ -1,0 +1,19 @@
+1
+00:00:00,320 --> 00:00:03,300
+Then Claude interviews you with a few simple
+
+2
+00:00:03,300 --> 00:00:05,000
+multiple-choice questions:
+
+3
+00:00:05,000 --> 00:00:07,450
+where it will be posted, the style, and the voice.
+
+4
+00:00:08,000 --> 00:00:09,700
+Meet synergy studio.
+
+5
+00:00:09,700 --> 00:00:12,900
+You chat with Claude, and it makes a professional video for you.
