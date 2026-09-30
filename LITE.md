@@ -544,3 +544,10 @@ acceptance"; the gate is then reported as "met except" those items, never as met
 For each test: PASS, PENDING or BLOCKED, with the literal command output that proves it. Then: every PENDING
 and BLOCKED item with what would close it and who can; what was not checked; the largest gap, marked as such;
 measured sizes of the tool home and the repo; which worker and model did each task. The pushed commit is named in the last message only, since a commit cannot contain its own hash.
+
+---
+
+## Changes made during the build
+| Date | Change | Reason |
+|---|---|---|
+| 2026-09-30 | The MCP server supports protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05` through `initialize`; a client asking for another version gets `2025-11-25`. Array lines (batches) get `-32600`. The server logs the version each client requests. | `research/mcp-protocol.md`: the newest revision (`2026-07-28`) replaces `initialize` with per request metadata, but Claude Code sent `initialize` on this Mac on 2026-09-30, and 8.1 names `initialize`. T14 and T16 confirm what the clients send. |
