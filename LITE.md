@@ -31,7 +31,7 @@ Desktop both see the instructions and can run the pipeline without a separate sk
 | The user has or wants | Kind | Mode |
 |---|---|---|
 | an idea or script, no footage | narrated motion graphics (explainer, ad, tips, list) | `narrated` |
-| music and on screen text only | kinetic motion piece (reel, sting, title sequence) | `narrated` with every `say` empty and `hold` set |
+| music and pictures, no voice | wordless story, short film, drawn animation, kinetic motion piece | `film` (scenes in seconds, music sets the feel) |
 | their own clips (talking head, selfie) | footage edit: cut, grade, word captions, overlays | `footage` with `edit.clips` |
 | an existing finished MP4 made anywhere | improve: reframe, recut, captions, overlays, audio polish; or remake as a new project | `footage` via `import` |
 | photos and a song | photo ad cut to the beat | `footage` without `edit`, `voice_track: false` |
@@ -47,12 +47,17 @@ characters) comes from using the user's own files and from Claude checking the s
 Recognising frames is Claude's responsibility in the skill's review (`references/review.md`); an image
 recognition check for specific mascots or logos would need a vision model and reference images per brand.
 
+### 1.3a Starting point
+The build starts from the owner's lite code: `skills/synergy-studio/` at commit `30127c8` is copied into the repo
+at L0 and changed. This file describes the result, not a rewrite. `ledger/CODEMAP.md` maps each requirement here
+to **exists**, **change** or **new** in that code.
+
 ### 1.4 The skill is the contract
-The owner's finished skill at commit `7bc67f3` of branch `claude/clever-lamport-n7of0u`
+The owner's finished skill at commit `30127c8` of branch `claude/clever-lamport-n7of0u`
 (`skills/synergy-studio/`: SKILL.md, `references/`, `template/`, `examples/`) is the contract for the scripts.
 Every command, flag, output file, template file, helper, look, font and platform name it mentions must exist
-in the rebuild and behave as it describes. Where this file lists fewer, the skill wins; where this file adds
-something (the MCP server, `import`, `frames`, `look`, `synctest`, `rng`, `boil`, `grain`, caption styles), both
+in the built code and behave as it describes. Where this file lists fewer, the skill wins; where this file adds
+something (the MCP server, `import`, `frames`, `look`, `synctest`, caption styles), both
 apply. Test T0 checks the contract mechanically.
 **Where the skill and this build disagree, the build's real tools are the truth.** SKILL.md and
 `references/*.md` are corrected to match (section 9); no contradiction may remain in the shipped text.
@@ -83,10 +88,10 @@ apply. Test T0 checks the contract mechanically.
   .mcp.json                         starts mcp/server.mjs with ${CLAUDE_PLUGIN_ROOT}
   skills/synergy-studio/
     SKILL.md                        the workflow (section 9)
-    references/                     the owner's files (checks-and-fixes craft creative design footage generators
-                                    hyperframes intake review storytelling three troubleshooting voice-and-audio)
-                                    plus two added by this build: styles.md mcp.md
-    template/                       index.html  lib.js  looks.css  brief.md  shots.md  feedback.md
+    references/                     every file the owner's base commit has (including commands.md, his single
+                                    command reference, and cinema, illustration, character, tone) plus two added
+                                    by this build: styles.md mcp.md
+    template/                       index.html  lib.js  sketch.js  looks.css  brief.md  shots.md  feedback.md
     examples/                       hydration-tips/  footage-captions/  three-product/  (section 10)
     scripts/
       studio.mjs                    dispatcher only: parses arguments, calls lib/<command>.mjs
@@ -188,7 +193,7 @@ No runtime dependencies. Tests may use the official MCP TypeScript SDK client as
 |---|---|---|---|
 | `name` | string | folder name | output file name stem |
 | `kind` | `studio` \| `hyperframes` | `studio` | `hyperframes` marks a plain HyperFrames folder brought in by `studio_import_hyperframes` (8.6); compose is skipped for it |
-| `mode` | `narrated` \| `footage` | `narrated` | 1.2 |
+| `mode` | `narrated` \| `footage` \| `film` | `narrated` | 1.2; `film` scenes are `{id, start, end}` in seconds with no voice |
 | `aspect` | `16:9` \| `9:16` \| `1:1` \| `4:5` | `16:9` | 1920x1080, 1080x1920, 1080x1080, 1080x1350 |
 | `platform` | `tiktok` \| `reels` \| `shorts` \| `meta` \| `youtube` \| `linkedin` \| `x` \| `website` (the list the owner's `new` accepts) | from `new` | drives the safe area guide (9.2) and the word budget |
 | `length` | seconds | 30 for 9:16, 60 otherwise | target length; `budget` and `audio` use it |
@@ -222,7 +227,8 @@ and wait for it (printing that they are waiting), whether started from the CLI o
 | `budget <dir>` | words that fit per scene for the target length | printed |
 | `say <dir> "text" [--voice]` | one line of speech to check a pronunciation | `audio/say.wav` |
 | `import <dir> <video> [--aspect]` | footage project from an existing file: copies it to `src/footage/`, one clip covering the whole file, prints duration, fps, size, whether it has audio, and makes `stills/source-sheet.jpg` | project, sheet |
-| `frames <video> [--n 12] [--out file]` | contact sheet of any video without a project | one JPEG |
+| `reference <dir> <video> [--every 2]` | the owner's reference study: contact sheet and cut rhythm | `reference/sheet.jpg`, `reference/cuts.json` |
+| `frames <video> [--n 12] [--out file]` | contact sheet of any video without a project; shares its code with `reference` | one JPEG |
 | `voice <dir> [--only s2,s4]` | Kokoro per scene, silence trimmed, prints words per second | `audio/vo/*.wav`, `durations.json` |
 | `audio <dir>` | timing (7.5), music, ducking, effects, mix, loudness to −14 LUFS and −1.5 dBTP | `timing.json`, `timing.js`, `audio/mix.wav` |
 | `words <dir>` | estimated word times for narrated captions (character proportional, ±0.25 s) | `transcript.json` |
@@ -234,8 +240,8 @@ and wait for it (printing that they are waiting), whether started from the CLI o
 | `synctest` | picture against sound for the whole pipeline (7.9) | result in `env.json` |
 | `look <dir> --from <files…>` | measures a reference (7.7) and drafts a custom look | `look-reference.json`, `src/look.css`, `stills/look-card.jpg` |
 | `compose <dir>` | lint (7.6), fill placeholders, copy files (7.6.1), run `hyperframes lint` | `comp/` |
-| `stills <dir> [t…] [--platform]` | compose, report page errors and low contrast text (`hyperframes validate`), then frames at 0.3 s, the middle and the end of every scene and the last second (or the given times), a sheet in time order (written as both `sheet.jpg` and an identical `contact-sheet.jpg`, because the owner's text uses both names) and a safe area guide | `stills/*.jpg`, `stills/sheet.jpg`, `stills/contact-sheet.jpg`, `stills/safe-<platform>.jpg` |
-| `render <dir> [--draft]` | compose, move the previous render to `history/`, render at the project fps, retry once, re-normalise loudness after AAC, save the page's caption record | `out/<name>-9x16.mp4` (the aspect with `x`, never a colon), `out/captions.json` |
+| `stills <dir> [t…] [--platform]` | compose, report page errors and low contrast text (`hyperframes validate`), then frames at 0.3 s, the middle and the end of every scene and the last second (or the given times), a sheet in time order and a safe area guide | `stills/*.jpg`, `stills/sheet.jpg` (the one name since the owner's cold audit), `stills/safe-<platform>.jpg` |
+| `render <dir> [--draft]` | compose, move the previous render to `history/`, render at the project fps, retry once, re-normalise loudness after AAC, write `-share.mp4` (under 25 MB) when the file is larger, save the page's caption record | `out/<name>-9x16.mp4` (the aspect with `x`, never a colon), `out/captions.json` |
 | `check <dir>` | 7.8 checks and a final contact sheet | `out/check.json`, `stills/final-sheet.jpg` |
 | `help` | lists commands | |
 
@@ -293,7 +299,7 @@ rendered for any look, so looks can be compared.
 | audio against mix | all but `kind: hyperframes` without a mix file | 7.9 A: lag ≤ 1 frame, correlation ≥ 0.9, the last 2 s match, no silent stretch of 0.5 s or more in the MP4 where the mix has sound |
 | captions | pages that call `captions()` | `out/captions.json` exists; every transcript word inside the video's range is in it; no word is highlighted more than 150 ms before its start |
 
-### 7.9 Sync verification (the owner's design: his LITE.md section 5 at commit `7bc67f3`)
+### 7.9 Sync verification (the owner's design: his LITE.md section 5 at commit `30127c8`)
 **A. Every video: audio in the MP4 against its source mix** (a `check` line). Decode the MP4's audio and
 `audio/mix.wav` to mono 8 kHz (`ffmpeg -ac 1 -ar 8000 -f f32le -`), take RMS envelopes in 10 ms windows and
 cross correlate over ±0.5 s in `scripts/syncaudio.py` (venv Python). Report lag and correlation. Pass: |lag| ≤ 1
@@ -388,7 +394,7 @@ and `synergy://examples/<name>/index.html`. Prompts: `new-video` (`idea`), `impr
   `mcp/` and `skills/`, with the current official bundle tool (commands from the current documentation, in
   `research/claude-desktop-bundles.md`), and validates it with that tool. Installing and using it is the owner's test.
 
-### 8.6 Plain HyperFrames projects (the owner's design: his LITE.md section 6 at commit `7bc67f3`)
+### 8.6 Plain HyperFrames projects (the owner's design: his LITE.md section 6 at commit `30127c8`)
 - `studio_import_hyperframes({folder, name})` copies an existing HyperFrames folder (its own `index.html`,
   assets and mixed audio) into the projects folder as `<name>` with `kind: "hyperframes"`; compose
   (placeholders, timing) is skipped for it. The LSPedia OneScan ad is not a HyperFrames project (its own
@@ -411,9 +417,8 @@ and `synergy://examples/<name>/index.html`. Prompts: `new-video` (`idea`), `impr
 ---
 
 ## 9. The skill
-**The owner's skill is finished** (commit `7bc67f3`). SKILL.md, `references/`, `template/brief.md`, `shots.md` and
-`feedback.md` are taken from that commit at L7, the three templates also at L4 (so `new` can write them), and
-the examples' `project.json`, `src/index.html` and small assets at L6: the only files the build copies.
+**The owner's skill is finished** (commit `30127c8`). It arrives with the starting code at L0 (1.3a); its text is
+corrected at L7, after everything else works.
 
 **Rule:** where SKILL.md and the MCP build disagree, the build's real tools are the truth. SKILL.md and
 `references/*.md` are fixed to match, and no contradiction is left. The owner's specific corrections:
@@ -433,8 +438,8 @@ the examples' `project.json`, `src/index.html` and small assets at L6: the only 
    with a tool is rewritten or removed, and listed in `BUILD_LOG.md`.
 6. The build also adds: `references/mcp.md` (tools, jobs and waiting, images returned, the Claude Desktop limits
    in 8.2); `references/styles.md` (below) with one line in SKILL.md step 3 pointing to it; mentions of the added
-   tools (`studio_project_import`, `studio_frames`, `studio_look_from`, `studio_synctest`) and helpers (`rng`,
-   `boil`, `grain`, caption styles) where they belong; and, if his text lacks it, the non interactive rule (when
+   tools (`studio_project_import`, `studio_frames`, `studio_look_from`, `studio_synctest`) and caption styles where
+   they belong; `references/commands.md` becomes the tool reference (each command's tool, inputs and outputs); and, if his text lacks it, the non interactive rule (when
    nobody can answer, take the stated defaults, mark PROPOSED items, and say so).
 7. The writing rules at the top of this file apply to the shipped text: dashes used as punctuation and version
    labels are rewritten, and a grep over SKILL.md and references for both comes back empty.
@@ -444,18 +449,17 @@ the examples' `project.json`, `src/index.html` and small assets at L6: the only 
 
 `references/styles.md`: how to reach any style. Built in looks; a custom look from words (variables, two font
 families at most, open licence fonts in `src/assets/fonts/`); a look from a reference; deterministic techniques
-for textured and hand drawn styles (`rng`, `boil`, `grain`, paper textures as static SVG filters, drawing on
-twos at 12 fps inside a 24 fps render); particles and generative shapes on a canvas whose `draw()` depends only
+for textured and hand drawn styles, using the owner's sketch kit (`template/sketch.js`: hatching, line boil, ink
+outlines, paper and scratch textures, glow, camera, seeded `rng` and `hash`) and `SS.start({cuts: "hard"})` for
+match cuts; drawing on twos inside a 24 fps render; particles and generative shapes on a canvas whose `draw()` depends only
 on tween state; 60 fps motion pieces. Every technique has a snippet that the build has rendered.
 
 ### 9.1 `lib.js` helpers
-`SS.start()` returns every helper the skill names (at commit `7bc67f3`: `tl, T, EV, TOTAL, V, S, at, rise, fadeIn,
+`SS.start()` returns every helper the skill names (at commit `30127c8`: `tl, T, EV, TOTAL, V, S, at, rise, fadeIn,
 fadeOut, pop, press, pick, count, drawIn, stagger, kenburns, punch, captions, finish`, and any others its examples
-use), plus `rng, boil, grain`. Scenes fade in at start and out at end automatically.
-- `rng(seed)`: seeded generator (mulberry32) returning numbers in [0, 1); the only allowed randomness.
-- `boil(selector, t0, t1, {fps = 12, amount = 2, seed})`: steps an SVG displacement filter's seed at `fps` so
-  lines wobble like hand drawing; the same time always gives the same frame.
-- `grain(opacity, seed)`: a static noise overlay from an SVG `feTurbulence` filter.
+use). Scenes fade in at start and out at end automatically, unless `SS.start({cuts: "hard"})`. Textures, line boil
+and seeded randomness come from the owner's sketch kit (`template/sketch.js`, compose copies it); this build adds
+no second copy of them.
 - `captions({top, size, font, color, highlight, box, boxColor, maxWords, maxChars, from, to, style})`: word by
   word captions from `window.WORDS`; `style` is `color` (active word recoloured), `pop` (active word scaled 1.15
   and recoloured) or `box` (active word gets a box); it records every group with its words and times in
@@ -475,7 +479,7 @@ shorts 288, 672, 60, 201 (reels from Meta's published figures; tiktok and shorts
 
 ---
 
-## 10. Examples (the owner's, taken from commit `7bc67f3` at L6; each must pass `check` with the rebuilt scripts)
+## 10. Examples (the owner's, in the starting code; each must pass `check` with the changed scripts)
 | Folder | Kind | Must show |
 |---|---|---|
 | `hydration-tips/` | narrated, 9:16, `midnight`, about 28 s | scenes from `project.json`, events with sound, a counter |
@@ -503,18 +507,18 @@ get three rounds; after the third failing round the test is BLOCKED with the sco
 
 | # | Test | Pass | Falsifier run alongside (must fail) |
 |---|---|---|---|
-| T0 | skill contract (run against `reference/lite-branch` at the end of L5 and L6, and against the adopted text at L7) | a script lists every `studio <command>`, every `--flag`, every file name and every helper named in SKILL.md, `references/` and the examples at commit `7bc67f3`, and proves each exists: after L7 each named tool is in `tools/list`; the command's usage text shows the flag, the file is produced by the command the skill says, the helper is returned by `SS.start()`; the list and results go in `BUILD_LOG.md` | the same script run against a copy of SKILL.md with a made up command `studio fly` fails |
+| T0 | skill contract (run against `reference/lite-branch` at the end of L5 and L6, and against the adopted text at L7) | a script lists every `studio <command>`, every `--flag`, every file name and every helper named in SKILL.md, `references/` and the examples at commit `30127c8`, and proves each exists: after L7 each named tool is in `tools/list`; the command's usage text shows the flag, the file is produced by the command the skill says, the helper is returned by `SS.start()`; the list and results go in `BUILD_LOG.md` | the same script run against a copy of SKILL.md with a made up command `studio fly` fails |
 | T1 | setup into a temporary home with a space in its path (`tmp/home test/`), then `doctor --full`; then setup into the default home and `doctor --full` again | every line PASS both times (`synctest` is not part of T1; it needs render, built at L4), including the three.js test render (the 60 fps line may be WARN, which makes T10 BLOCKED with that reason); setup time and `du -sh` of each home folder recorded; a second `setup` skips every step | rename `bin/ffprobe`: doctor shows FAIL with the fix |
 | T2 | compose lint | each rule in 7.6 has a fixture page refused with that rule's message | a clean page composes |
 | T3 | first transcription on the Mac | Whisper downloads and `transcript.json` holds words for raw clip `c1` | an empty WAV gives a plain error, not a crash |
 | T4 | word timing accuracy of `transcribe` | fixture: 20 different words synthesised one at a time with Kokoro, joined with gaps of 0.30 to 0.70 s (fixed list); the true onset of each word is the first sample of its clip whose absolute value exceeds 0.01; median absolute onset error ≤ 80 ms, 95th percentile ≤ 200 ms | the same scorer on evenly spaced fake timings fails |
 | T5 | examples | all three render and pass `check` | a copy of hydration-tips with one `data-start` id removed fails compose |
-| T6 | determinism | hydration-tips plus a page using `rng(1)`, `boil` and `grain`, each rendered twice: decoded frames at 1 s, the middle and the last second are identical | the same page with `rng(2)` differs |
+| T6 | determinism | hydration-tips plus a sketch kit page (hatching, line boil, paper grain, drawn with `rng(1)`), each rendered twice: decoded frames at 1 s, the middle and the last second are identical | the same sketch kit page with `rng(2)` differs |
 | T7 | Haura improve | the four raw clips become a 9:16 reel with trims, warm grade, word captions (`style: "pop"`), a name tag, topic chips, product photos appearing within 0.4 s of the words that name them, a follow card and an end card. `check` all PASS. `out/captions.json` holds at least 90% of the transcript's words. The mean absolute pixel difference in the caption band (full width, from the captions `top` to `top` plus 2.5 times the caption `size`), between a still at a spoken word and the same still with `captions()` removed, is above 10 on a 0 to 255 scale. A judge confirms each element is visible, citing frames | (a) the same page with `captions()` removed fails the captions assertions; (b) the MP4 with its audio delayed 3 frames (ffmpeg `-itsoffset`) fails the audio against mix check |
 | T7s | `synctest` and the footage warning | `synctest` passes (7.9 B) and reports its mean offset; `cut` on a generated clip whose audio stream starts 0.2 s after its video prints the warning (7.9 C), and on a clean clip does not | a synctest page with its beeps placed 3 frames late fails |
 | T8 | improve a finished MP4 | `import` of `onescan.mp4` becomes a 9:16 cut down of about 30 s with `crop_x` chosen per clip, word captions from its narration and an end card; `check` all PASS; captions assertions as T7; a judge confirms no on screen text is cut off by the crop, citing frames | the same project with `crop_x: 0` on every clip is judged as cutting text off |
 | T9 | OneScan family | an original narrated 16:9 explainer of 45 to 60 s in `midnight` on a topic the agent picks (not OneScan); `check` PASS; a judge runs the review list of `references/review.md` on its stills with `reference/breakdowns/onescan.md` as the quality reference: every ⛔ TRUE, every ◇ TRUE or explained | |
-| T10 | motion reel | an original 15 to 20 s piece with `fps: 60`, English on screen text, generated music, no voice, kinetic type, particles or generative shapes, a frame overlay; `check` PASS; the build is given the path of `motion-reel.mp4` and must call `studio_frames` and `studio_look_from` on it (shown in its output); judge scores style match ≥ 4 against the reel contact sheet and confirms no copied text | the same MP4 converted to 30 fps with ffmpeg makes `check` exit 2 |
+| T10 | motion reel | an original 15 to 20 s piece in `mode: film` with `fps: 60`, English on screen text, generated music, no voice, kinetic type, particles or generative shapes, a frame overlay; `check` PASS; the build is given the path of `motion-reel.mp4` and must call `studio_frames` and `studio_look_from` on it (shown in its output); judge scores style match ≥ 4 against the reel contact sheet and confirms no copied text | the same MP4 converted to 30 fps with ffmpeg makes `check` exit 2 |
 | T11 | doodle style check | plan and stills only, original topic; the build is given the path of `doodle-timeline.mp4` and derives its look with `studio_look_from`; judge scores style match ≥ 4 against the doodle contact sheet | |
 | T12 | cosmos style check | stills plus a 6 s render showing line boil, a walk cycle of an original simple character and a zoom through an element; judge scores style ≥ 4; the build's own review records its frame check that no character resembles a known mascot or character (Claude's responsibility, 1.3) | |
 | T13 | look from reference | `look --from` on each of the five reference videos gives a look that composes; judge scores palette and texture ≥ 4 for each against its reference | the `paper` look card judged against the cosmos reference scores ≤ 2 |
@@ -525,7 +529,7 @@ get three rounds; after the third failing round the test is BLOCKED with the sco
 | T17 | Claude Desktop bundle | `dist/synergy-studio.mcpb` builds and validates with the official tool | |
 | T18 | Claude Desktop by the owner | installs the bundle, asks for a video, gets an MP4 | owner's test; PENDING until he reports |
 
-**Residual gaps named in advance:** no automatic image judge; recognising logos, mascots and characters in
+**Residual gaps named in advance:** `beats` can miss a click exactly at 0 s (the owner's known open item); no automatic image judge; recognising logos, mascots and characters in
 frames rests on Claude's review (1.3); the per video check compares audio with its mix, and picture against
 sound is proven once per computer by `synctest`, not per video; Whisper depends on
 huggingface.co for its first download (if it is blocked, T3, T4, T7, T8 and T16b are PENDING, and they close
@@ -551,3 +555,4 @@ measured sizes of the tool home and the repo; which worker and model did each ta
 | Date | Change | Reason |
 |---|---|---|
 | 2026-09-30 | The MCP server supports protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05` through `initialize`; a client asking for another version gets `2025-11-25`. Array lines (batches) get `-32600`. The server logs the version each client requests. | `research/mcp-protocol.md`: the newest revision (`2026-07-28`) replaces `initialize` with per request metadata, but Claude Code sent `initialize` on this Mac on 2026-09-30, and 8.1 names `initialize`. T14 and T16 confirm what the clients send. |
+| 2026-09-30 | `setup` builds whisper.cpp's `whisper-cli` from a pinned, hashed source release into `<home>/runtime/whisper/` with cmake from PyPI and the Xcode Command Line Tools compiler, and every HyperFrames call gets `HYPERFRAMES_WHISPER_PATH`. Without a compiler, setup says transcription is unavailable and continues. | `research/whisper-model.md`: HyperFrames 0.8.92 does not ship whisper-cli and otherwise runs `brew install whisper-cpp` or a git clone build on first transcription, which this build may never do. |
