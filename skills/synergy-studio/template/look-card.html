@@ -3,7 +3,9 @@
      `studio look` composes it with looks.css (a built in look) or looks.css plus src/look.css (a custom look) and takes
      one snapshot. Only the look variables and the bundled fonts are used, nothing moves, and nothing comes from the network.
      The @font-face rules are copied from looks.css because HyperFrames reads only rules written in the page itself.
-     Three placeholders in double braces are filled by `studio look`: the data-look value, the link to src/look.css (empty for a built in look) and the grain overlay (empty when the look has no grain). -->
+     `studio look` fills three placeholders in double braces: the data-look value, the link to src/look.css (empty for a built in look) and the panes.
+     The block between the pane markers is one card; it is drawn once, or twice side by side (left half the light world, right half the dark world)
+     when a reference lives in two worlds. Each pane gets its own class and its own texture layers (none when its world has no texture). -->
 <html><head><meta charset="UTF-8">
 <script src="gsap.min.js"></script>
 <link rel="stylesheet" href="looks.css">
@@ -41,11 +43,35 @@ html,body{width:1920px;height:1080px}
 .k-rule{position:absolute;left:150px;right:150px;top:950px;height:2px;background:var(--line)}
 .k-swatches{position:absolute;left:150px;top:980px;display:flex;gap:14px}
 .k-swatches i{display:block;width:74px;height:44px;border-radius:10px;border:2px solid var(--line)}
-.grain-overlay{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+.k-pane{position:absolute;left:0;top:0;width:1920px;height:1080px}
+.k-half{width:960px;overflow:hidden;color:var(--ink);background:radial-gradient(900px 700px at 30% 20%,var(--glow) 0%,var(--bg) 55%,var(--bg2) 100%)}
+.k-right{left:960px}
+.k-half .k-lbl{left:70px;top:70px}
+.k-half .k-title{left:70px;top:112px;width:600px;font-size:92px}
+.k-half .k-body{left:70px;top:340px;width:800px;font-size:30px}
+.k-half .k-chips{left:70px;top:548px;gap:16px}
+.k-half .k-card{left:70px;top:640px;width:640px;padding:32px 36px 30px}
+.k-half .k-card h2{font-size:36px}
+.k-half .k-card p{font-size:24px;margin-top:14px}
+.k-half .k-bar{margin-top:20px}
+.k-half .k-tags{margin-top:20px}
+.k-half .k-tags b{font-size:20px;padding:6px 14px}
+.k-half .k-shape{left:690px;top:60px;width:190px;height:190px}
+.k-half .k-shape2{left:740px;top:690px;width:130px;height:130px;border-radius:26px}
+.k-half .k-rule{left:70px;right:70px;top:960px}
+.k-half .k-swatches{left:70px;top:985px;gap:8px}
+.k-half .k-swatches i{width:52px;height:36px;border-radius:8px}
+.grain-overlay,.paper-overlay,.grain-overlay-2,.paper-overlay-2{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
 </style></head>
 <body>
 <div id="root" data-look="{{LOOK}}" data-composition-id="main" data-width="1920" data-height="1080" data-fps="30" data-duration="1">
   <div class="scene clip" id="card" data-start="0" data-duration="1" data-track-index="1" style="opacity:1">
+    {{PANES}}
+  </div>
+</div>
+<script>window.__timelines = window.__timelines || {}; window.__timelines["main"] = gsap.timeline({paused: true}).to("#card", {opacity: 1, duration: 1}, 0);</script>
+<!--pane-->
+<div class="k-pane {{PANECLASS}}">
     <div class="k-shape"></div>
     <div class="k-shape2"></div>
     <div class="k-lbl lbl">Look card</div>
@@ -60,8 +86,7 @@ html,body{width:1920px;height:1080px}
     </div>
     <div class="k-rule"></div>
     <div class="k-swatches"><i style="background:var(--bg)"></i><i style="background:var(--bg2)"></i><i style="background:var(--card)"></i><i style="background:var(--ink)"></i><i style="background:var(--muted)"></i><i style="background:var(--accent)"></i><i style="background:var(--accent2)"></i><i style="background:var(--accent3)"></i><i style="background:var(--accent4)"></i><i style="background:var(--ok)"></i><i style="background:var(--bad)"></i></div>
-    {{GRAIN}}
-  </div>
+    {{TEXTURE}}
 </div>
-<script>window.__timelines = window.__timelines || {}; window.__timelines["main"] = gsap.timeline({paused: true}).to("#card", {opacity: 1, duration: 1}, 0);</script>
+<!--/pane-->
 </body></html>

@@ -364,3 +364,277 @@ def test_card_adjustment_is_explained_in_a_comment():
     css, v, info = look.render_css(ref)
     assert "--card adjusted from #131313 (ink contrast 4.09)" in css and "so the ink on it keeps 4.5" in css
     assert look.contrast_ratio(v["--ink"], v["--card"]) >= look.INK_MIN
+
+
+# ------------------------------------------------------------------ temporal texture (boil) and two worlds
+def drawing(seed=None, level=4.0):
+    """a static drawing: flat paper with a dark outline, plus texture noise drawn from `seed` (None: no texture)"""
+    a = np.full((360, 640), 205.0)
+    a[100:104, 100:500] = 40
+    a[256:260, 100:500] = 40
+    if seed is not None:
+        a += look._box(np.random.default_rng(seed).normal(0, level, a.shape), 3)
+    return a
+
+
+def test_redrawn_texture_shows_between_two_frames_and_a_fixed_one_does_not():
+    assert look.boil_between(drawing(1), drawing(2)) > 0.3                                    # a broad share of the static area changed
+    assert look.boil_between(drawing(1), drawing(1)) == pytest.approx(0.0, abs=1e-9)          # same texture: no change
+    assert look.boil_between(drawing(None), drawing(None)) == 0.0                             # a clean drawing: no change
+    flat = np.full((360, 640), 90.0)
+    assert look.boil_between(flat, flat) is None                                              # nothing but flat fills: nothing to judge
+
+
+def test_a_moving_object_or_a_pan_is_not_boil():
+    base = drawing(1)
+    assert look.boil_between(base, np.roll(base, (0, 2), axis=(0, 1))) is None               # the whole picture panned by 2 px: nothing is static
+    a, b = drawing(1), drawing(1)
+    a[150:230, 200:280] = 30
+    b[150:230, 240:320] = 30                                                                  # an object moved 40 px, the paper stays
+    assert look.boil_between(a, b) == pytest.approx(0.0, abs=0.05)
+
+
+def test_a_fade_is_not_boil():
+    a = drawing(1)
+    assert look.boil_between(a, a * 0.9 + 5) is None or look.boil_between(a, a * 0.9 + 5) < 0.05
+
+
+def write_video(tmp_path, name, frame_of, n=72, fps=24):
+    out = tmp_path / name
+    p = subprocess.Popen([FFMPEG, "-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", "640x360", "-r", str(fps), "-i", "-",
+                          "-c:v", "libx264", "-crf", "23", "-pix_fmt", "yuv420p", str(out)], stdin=subprocess.PIPE)
+    for i in range(n):
+        p.stdin.write(np.clip(frame_of(i), 0, 255).astype(np.uint8).tobytes())
+    p.stdin.close()
+    assert p.wait() == 0
+    return out
+
+
+def temporal(video, n=72, fps=24, cuts=()):
+    return look.temporal_texture(FFMPEG, video, n / fps, fps, list(cuts))
+
+
+# what fooled the boil measure in real references: soft glows, drifting or dithered gradients, twinkling specks, particles,
+# fast flat shapes (also at 60 fps), motion blur, hard cuts. None of them is a redrawn texture.
+_Y, _X = np.mgrid[0:360, 0:640].astype(float)
+_BAYER = np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]) / 16.0
+
+
+def _outline(a):
+    a = a.copy()
+    a[100:104, 100:500] = 0.6 * a.mean()
+    a[256:260, 100:500] = 0.6 * a.mean()
+    return a
+
+
+def _glows(i, base, amp=40):
+    a = np.full((360, 640), float(base))
+    for k, (cx, cy) in enumerate([(160, 120), (420, 220), (520, 90)]):
+        cx += 2 * i * (1 if k % 2 else -1)
+        cy += 1.0 * i
+        a += amp * (0.6 + 0.4 * np.sin(i * 0.15 + k)) * np.exp(-((_X - cx) ** 2 + (_Y - cy) ** 2) / (2 * 60 ** 2))
+    return a
+
+
+def _radial(i, lo, hi):
+    return lo + (hi - lo) * np.clip(1 - np.hypot(_X - (200 + 3 * i), _Y - 180) / 500, 0, 1)
+
+
+def _dither(a, i):
+    return np.floor(a + _BAYER[np.mod(_Y.astype(int) + i, 4), np.mod(_X.astype(int), 4)])
+
+
+def _specks(i, base):
+    a = np.full((360, 640), float(base))
+    for j, (y, x) in enumerate(np.random.default_rng(1).integers(0, [357, 637], (60, 2))):
+        a[y:y + 2, x:x + 2] = base + 60 * (0.5 + 0.5 * np.sin(i * 0.9 + j))
+    return a
+
+
+def _shapes(i, speed=15):
+    a = np.full((360, 640), 235.0)
+    for k, (y, h, w, v) in enumerate([(60, 80, 100, 40), (180, 90, 140, 90), (280, 50, 60, 150)]):
+        x = int((i * speed * (1 + k * 0.5) + k * 200) % (640 + w)) - w
+        a[y:y + h, max(x, 0):max(min(x + w, 640), 0)] = v
+    return a
+
+
+def _particles(i):
+    a = np.full((360, 640), 18.0)
+    rng = np.random.default_rng(3)
+    p0, v = rng.uniform(0, [360, 640], (300, 2)), rng.uniform(-4, 4, (300, 2))
+    for (y, x), (vy, vx) in zip(p0, v):
+        a[int(y + vy * i) % 357:int(y + vy * i) % 357 + 3, int(x + vx * i) % 637:int(x + vx * i) % 637 + 3] = 200
+    return a
+
+
+def _cuts(i):
+    k = (i // 12) % 3
+    a = np.full((360, 640), [230.0, 25.0, 150.0][k])
+    a[100 + 20 * k:200 + 20 * k, 150 + 50 * k:350 + 50 * k] = [40.0, 220.0, 60.0][k]
+    return a
+
+
+def _paper(i, level=4.0, base=205):
+    return _outline(np.full((360, 640), float(base))) + look._box(np.random.default_rng(i // 2).normal(0, level, (360, 640)), 3)
+
+
+def _blurred(i):
+    a = _shapes(i, 10)
+    for _ in range(2):
+        a = look._box(a, 5)
+    return a
+
+
+NEGATIVES = {          # name: (frame function, fps, frames)
+    "glow_dark": (lambda i: _outline(_glows(i, 18)), 24, 96),
+    "glow_light": (lambda i: _outline(_glows(i, 190, 30)), 24, 96),
+    "radial_gradient_dark": (lambda i: np.round(_radial(i, 8, 45)), 24, 96),
+    "dithered_gradient_dark": (lambda i: _dither(_outline(_radial(i, 8, 45)), i), 24, 96),
+    "dithered_gradient_light": (lambda i: _dither(_outline(_radial(i, 150, 225)), i), 24, 96),
+    "specks_dark": (lambda i: _specks(i, 20), 24, 96),
+    "specks_mid": (lambda i: _specks(i, 140), 24, 96),
+    "particles": (_particles, 24, 96),
+    "fast_flat_shapes_60fps": (lambda i: _shapes(i, 8), 60, 240),
+    "motion_blur": (_blurred, 24, 96),
+    "hard_cuts_every_bar": (_cuts, 24, 96),
+}
+POSITIVES = {
+    "paper_light": lambda i: _paper(i),
+    "paper_mid": lambda i: _paper(i, base=120),
+}
+
+
+@needs_ffmpeg
+def test_temporal_threshold_separates_synthetic_videos(tmp_path):
+    def moving(i):
+        a = np.full((360, 640), 205.0)
+        a[150:250, 40 + i * 6:120 + i * 6] = 30
+        return a
+    fixed = look._box(np.random.default_rng(99).normal(0, 4, (360, 640)), 3)
+    cases = dict(NEGATIVES)
+    cases.update({"clean_static": (lambda i: drawing(None), 24, 72), "clean_moving": (moving, 24, 72),
+                  "fixed_texture": (lambda i: drawing(None) + fixed, 24, 72),
+                  "panned_fixed_texture": (lambda i: np.roll(drawing(None) + fixed, (0, 2 * i), axis=(0, 1)), 24, 72)})
+    cases.update({k: (f, 24, 96) for k, f in POSITIVES.items()})
+    got = {}
+    for k, (fn, fps, n) in cases.items():
+        video = write_video(tmp_path, k + ".mp4", fn, n=n, fps=fps)
+        got[k] = look.temporal_texture(FFMPEG, video, n / fps, fps, look.count_cuts(FFMPEG, video))
+    for k in cases:
+        if k in POSITIVES:
+            assert got[k]["present"] is True and got[k]["value"] >= 2 * look.TEMPORAL_PRESENT, (k, got[k])
+        else:
+            assert got[k]["present"] is False and got[k]["value"] < 0.75 * look.TEMPORAL_PRESENT and max(got[k]["per_pair"] or [0]) < look.TEMPORAL_PRESENT, (k, got[k])
+    # the threshold sits between the two groups, from these synthetics: negatives at most 0.06, paper texture 0.2 (documented in look.py)
+    assert max(got[k]["value"] for k in cases if k not in POSITIVES) < look.TEMPORAL_PRESENT < min(got[k]["value"] for k in POSITIVES)
+
+
+@needs_ffmpeg
+def test_a_barely_visible_redraw_is_below_the_threshold(tmp_path):
+    video = write_video(tmp_path, "faint.mp4", lambda i: drawing(i // 2, level=1.5), n=96)
+    assert look.temporal_texture(FFMPEG, video, 4.0, 24, [])["present"] is False                # under one luma level of change: not visible
+
+
+@needs_ffmpeg
+def test_texture_that_lives_in_one_stretch_still_counts(tmp_path):
+    # the first third is a redrawn paper world, the rest is a clean static night world: a median would call it clean
+    video = write_video(tmp_path, "w.mp4", lambda i: drawing(i // 2) if i < 24 else np.full((360, 640), 30.0) + 0 * drawing(None), n=96)
+    t = look.temporal_texture(FFMPEG, video, 4.0, 24, [])
+    assert t["share_of_pairs"] >= look.TEMPORAL_SHARE and t["present"] is True
+
+
+@needs_ffmpeg
+def test_pairs_avoid_cuts(tmp_path):
+    video = write_video(tmp_path, "cut.mp4", lambda i: drawing(None) if i < 36 else drawing(None) * 0.5, n=72)
+    with_cut = look.temporal_texture(FFMPEG, video, 3.0, 24, [1.5])
+    assert with_cut["value"] == 0.0 and with_cut["present"] is False and with_cut["pairs"] >= 5
+
+
+@needs_ffmpeg
+def test_cli_reports_boil_and_writes_the_paper_overlay(tmp_path):
+    video = write_video(tmp_path, "boil.mp4", lambda i: drawing(i // 2))
+    proj, r = cli(tmp_path, video)
+    assert r.returncode == 0, r.stderr
+    ref = json.loads((proj / "look-reference.json").read_text())
+    t = ref["video"]["temporal_texture"]
+    assert t["present"] is True and t["value"] > 0.15 and t["threshold"] == look.TEMPORAL_PRESENT
+    css = (proj / "src" / "look.css").read_text()
+    assert ".paper-overlay{" in css and "<svg class=\"paper-overlay\"" in css and "K.frame(t)" in css and "K.paperBG()" in css
+    clean = write_video(tmp_path, "clean.mp4", lambda i: drawing(None))
+    proj2, r2 = cli(tmp_path, clean, name="clean")
+    assert ".paper-overlay{" not in (proj2 / "src" / "look.css").read_text()
+    assert json.loads((proj2 / "look-reference.json").read_text())["video"]["temporal_texture"]["present"] is False
+
+
+def two_world_frames():
+    light = blocks_image(["#E4E3DD", "#D58167"], weights=[9, 1])
+    dark = blocks_image(["#141126", "#4B3081"], weights=[9, 1])
+    return light, dark
+
+
+def test_two_worlds_are_found_with_both_backgrounds():
+    light, dark = two_world_frames()
+    ref = measure(*([light] * 4 + [dark] * 6))
+    w = ref["worlds"]
+    assert w["two_worlds"] is True and w["light"]["share"] == 0.4 and w["dark"]["share"] == 0.6
+    assert look.delta_e(look.hex_lab(w["light"]["background"]), look.hex_lab("#E4E3DD")) < 3
+    assert look.delta_e(look.hex_lab(w["dark"]["background"]), look.hex_lab("#141126")) < 3
+    css = css_of(ref)
+    assert "Two worlds" in css and w["light"]["background"] in css and "The variables below are the dark world" in css and "#root .world-2{" in css
+
+
+def test_one_world_or_a_small_second_one_is_not_two_worlds():
+    light, dark = two_world_frames()
+    assert measure(*([light] * 6)) ["worlds"]["two_worlds"] is False
+    assert measure(*([light] * 9 + [dark]))["worlds"]["two_worlds"] is False              # 10% is under the quarter
+    assert "Two worlds" not in css_of(measure(*([light] * 9 + [dark]))) and "world-2" not in css_of(measure(*([light] * 9 + [dark])))
+
+
+# ------------------------------------------------------------------ two worlds judged separately
+def test_each_world_is_measured_on_its_own_frames():
+    rng = np.random.default_rng(5)
+    light = np.clip(blocks_image(["#E4E3DD", "#D58167"], weights=[9, 1]).astype(float) + rng.normal(0, 5, (240, 360, 1)), 0, 255).astype(np.uint8)   # grainy paper
+    dark = blocks_image(["#141126", "#4B3081"], weights=[9, 1])                                                                                       # clean night
+    ref = measure(*([light] * 4 + [dark] * 6))
+    w = ref["worlds"]
+    assert w["two_worlds"] is True
+    assert w["light"]["grain"]["present"] is True and w["dark"]["grain"]["present"] is False
+    assert w["light"]["grain"]["value"] > 10 * max(w["dark"]["grain"]["value"], 0.01)
+    assert len(w["light"]["palette"]) >= 2 and w["light"]["palette"][0]["lab"][0] > 50 > w["dark"]["palette"][0]["lab"][0]
+
+
+def test_the_second_world_is_written_as_a_documented_block_with_its_own_texture():
+    rng = np.random.default_rng(5)
+    light = np.clip(blocks_image(["#E4E3DD", "#D58167"], weights=[9, 1]).astype(float) + rng.normal(0, 5, (240, 360, 1)), 0, 255).astype(np.uint8)
+    dark = blocks_image(["#141126", "#4B3081"], weights=[9, 1])
+    ref = measure(*([light] * 3 + [dark] * 7))                                   # the dark world is the main one
+    css, v, _ = look.render_css(ref)
+    assert ref["mode"] == "dark"
+    block = re.search(r"#root \.world-2\{([^}]*)\}", css)
+    assert block, "the light world is a #root .world-2 block"
+    for var in VARS:
+        assert re.search(rf"{var}:#[0-9A-F]{{6}};", block.group(1)), var
+    assert look.hex_lab(re.search(r"--bg:(#[0-9A-F]{6})", block.group(1)).group(1))[0] > 50 > look.hex_lab(v["--bg"])[0]
+    assert ".grain-overlay-2{" in css and "<svg class=\"grain-overlay-2\"" in css       # texture only for the world that has it
+    assert ".grain-overlay{" not in css and "<svg class=\"grain-overlay\"" not in css
+    assert "The light world (background" in css and "class=\"world-2\"" in css
+    assert ref["worlds"]["light"]["look"]["--bg"] == re.search(r"--bg:(#[0-9A-F]{6})", block.group(1)).group(1)
+
+
+def test_a_single_world_reference_writes_no_world_block():
+    css = css_of(measure(blocks_image(KNOWN)))
+    assert "world-2" not in css
+
+
+@needs_ffmpeg
+def test_pairs_are_sorted_into_worlds_and_paper_in_one_world_is_found(tmp_path):
+    # 4 s of redrawn light paper, then 4 s of a clean dark world: overall the texture is diluted, inside the light world it is not
+    def frames(i):
+        return drawing(i // 2) if i < 96 else np.full((360, 640), 25.0) + 0 * drawing(None)
+    video = write_video(tmp_path, "two.mp4", frames, n=192)
+    t = look.temporal_texture(FFMPEG, video, 8.0, 24, [])
+    assert {q["world"] for q in t["pairs_detail"]} <= {"light", "dark"}
+    light = look.temporal_of([q for q in t["pairs_detail"] if q["world"] == "light"])
+    dark = look.temporal_of([q for q in t["pairs_detail"] if q["world"] == "dark"])
+    assert light["pairs"] >= 3 and light["present"] is True and dark["present"] is False and dark["value"] == 0.0

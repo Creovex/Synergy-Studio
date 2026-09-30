@@ -80,7 +80,7 @@ test("variables written in a comment do not count as defined", () => {
 test("card page fills its three placeholders for a built in look", () => {
   const html = cardHtml(TEMPLATE, "paper", null);
   assert.match(html, /data-look="paper"/);
-  assert.doesNotMatch(html, /\{\{|\}\}/);
+  assert.doesNotMatch(html, /\{\{|\}\}|<!--\/?pane-->/);
   assert.doesNotMatch(html, /href="look\.css"/);
   assert.doesNotMatch(html, /grain-overlay"/);
 });
@@ -96,9 +96,40 @@ test("card page for a custom look links look.css and adds the grain overlay only
   assert.throws(() => cardHtml(TEMPLATE, "custom", `${goodCss}#root .grain-overlay{opacity:0.1}`), /holds no grain overlay markup/);
 });
 
+test("card page draws the paper overlay and the grain overlay when the css styles them, each from its own markup", () => {
+  const paper = `${goodCss}/* <svg class="paper-overlay" width="100%" height="100%"><filter id="paperf"></filter><rect width="100%" height="100%" filter="url(#paperf)"/></svg> */\n#root .paper-overlay{opacity:0.1}\n`;
+  const html = cardHtml(TEMPLATE, "custom", paper);
+  assert.match(html, /<svg class="paper-overlay"/);
+  assert.doesNotMatch(html, /<svg class="grain-overlay"/);
+  const both = cardHtml(TEMPLATE, "custom", paper + grainCss.slice(goodCss.length));
+  assert.match(both, /<svg class="paper-overlay"[\s\S]*<svg class="grain-overlay"/);
+  assert.throws(() => cardHtml(TEMPLATE, "custom", `${goodCss}#root .paper-overlay{opacity:0.1}`), /holds no paper overlay markup/);
+});
+
+test("a look.css with a world-2 block gives two panes, light on the left and dark on the right, each with its own texture", () => {
+  const world2 = `${goodCss}#root .world-2{\n${LOOK_VARS.map((v) => `  ${v}:#abcdef;`).join("\n")}\n}\n`;
+  const svg2 = `/* <svg class="paper-overlay-2" width="100%" height="100%"><filter id="paperf-2"></filter><rect width="100%" height="100%" filter="url(#paperf-2)"/></svg> */\n#root .paper-overlay-2{opacity:0.1}\n`;
+  const panes = (html) => [...html.matchAll(/<div class="k-pane ([^"]*)">([\s\S]*?)(?=<div class="k-pane |<\/div>\s*<\/div>\s*<script)/g)];
+  const dark = cardHtml(TEMPLATE, "custom", world2 + svg2, { lightIsSecond: true });     // main variables are the dark world
+  const [left, right] = panes(dark);
+  assert.match(left[1], /k-half k-left world-2/);
+  assert.match(right[1], /k-half k-right/);
+  assert.doesNotMatch(right[1], /world-2/);
+  assert.match(left[2], /paper-overlay-2/, "the light world (left) carries its own texture");
+  assert.doesNotMatch(right[2], /overlay/, "the dark world has none");
+  const light = cardHtml(TEMPLATE, "custom", world2 + svg2, { lightIsSecond: false });   // main variables are the light world
+  const [l2, r2] = panes(light);
+  assert.match(l2[1], /k-half k-left$/);
+  assert.match(r2[1], /k-half k-right world-2/);
+  assert.match(r2[2], /paper-overlay-2/);
+  assert.equal((dark.match(/One card, every look/g) || []).length, 2, "the same card elements twice");
+  assert.equal((cardHtml(TEMPLATE, "custom", goodCss).match(/One card, every look/g) || []).length, 1, "a single world keeps the one card");
+  assert.doesNotMatch(cardHtml(TEMPLATE, "custom", goodCss), /<div class="k-pane [^"]*k-half/);
+});
+
 test("the placeholders are also replaced when the page mentions them more than once", () => {
-  const html = cardHtml("{{LOOK}} {{LOOK}} {{LOOKCSS}} {{GRAIN}}", "bold", null);
-  assert.equal(html, "bold bold  ");
+  const html = cardHtml("{{LOOK}} {{LOOK}} {{LOOKCSS}} [{{PANES}}]<!--pane-->P{{PANECLASS}}{{TEXTURE}}<!--/pane-->", "bold", null);
+  assert.equal(html, "bold bold  [P]");
 });
 
 test("card page uses only look variables, carries every bundled font rule, and touches no network", () => {
@@ -127,11 +158,18 @@ test("summary prints every measured number in plain language", () => {
     palette: [{ hex: "#141026", share: 0.42 }, { hex: "#E4E3DB", share: 0.34 }], background: { hex: "#141026", lightness: 6.01 }, mode: "dark",
     contrast: { best_pair: { ratio: 14.41 }, ink: { hex: "#E4E3DB", ratio: 14.41, adjusted: false } },
     grain: { value: 0.439, flat_share: 0.75, present: true, threshold: 0.4 }, edge_density: 0.0528,
-    video: { fps: 24, cuts_per_minute: 20.64, motion_energy: 0.0483, motion_energy_without_cuts: 0.0344 },
+    video: { fps: 24, cuts_per_minute: 20.64, motion_energy: 0.0483, motion_energy_without_cuts: 0.0344,
+      temporal_texture: { value: 0.003, share_of_pairs: 0.3, pairs: 10, present: true, threshold: 0.1, share_needed: 0.25 } },
+    worlds: { two_worlds: true,
+      light: { share: 0.41, background: "#E4E3DD", grain: { value: 0.24, present: false }, temporal_texture: { share_of_pairs: 0.25, pairs: 4, present: true } },
+      dark: { share: 0.59, background: "#141126", grain: { value: 0.23, present: false }, temporal_texture: { share_of_pairs: 0, pairs: 6, present: false } } },
   };
   const text = summary(ref);
-  for (const s of ["32 frames", "#141026 42%", "dark", "14.41 : 1", "0.439", "texture overlay", "0.0528", "24 fps", "20.64 cuts per minute", "0.0483", "10 rows"]) assert.ok(text.includes(s), s);
-  assert.match(summary({ ...ref, grain: { ...ref.grain, present: false } }), /below 0\.4: clean/);
+  for (const s of ["32 frames", "#141026 42%", "dark", "14.41 : 1", "0.439", "0.0528", "24 fps", "20.64 cuts per minute", "0.0483", "10 rows", "30% of 10 frame pairs change at least 10%", "redrawn texture", "two worlds", "#E4E3DD in 41%", "world-2", "light grain 0.24", "drawn on its half", "dark  grain 0.23", "not drawn"]) assert.ok(text.includes(s), s);
+  assert.match(summary({ ...ref, grain: { ...ref.grain, present: false }, worlds: { two_worlds: false } }), /below 0\.4: clean/);
+  const calm = summary({ ...ref, video: { ...ref.video, temporal_texture: { ...ref.video.temporal_texture, share_of_pairs: 0, present: false } }, worlds: { two_worlds: false } });
+  assert.match(calm, /no redrawn texture/);
+  assert.doesNotMatch(calm, /two worlds/);
 });
 
 // ---------------------------------------------------------------- a real run

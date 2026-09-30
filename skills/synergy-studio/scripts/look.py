@@ -37,6 +37,16 @@ EDGE_LEVEL = 16.0
 BLOCK, SUB = 32, 8
 BAR_LUMA, BAR_SPREAD, BAR_FRAMES = 17.5, 4.0, 0.95   # a black bar row or column: median luma at most 17.5, channels within 4 of each other, in 95% of a video's frames
 BAR_MIN_AREA, BAR_KEEP_AREA = 0.03, 0.30            # bars are cut only when they are at least 3% of the frame and at least 30% of it stays
+TEMPORAL_PAIRS, TEMPORAL_W, TEMPORAL_H = 10, 640, 360     # pairs of consecutive frames compared, and the size they are compared at
+TEMPORAL_CELL, TEMPORAL_MOVE, TEMPORAL_SHIFT = 16, 1.5, 3   # coarse cell (px), coarse change that means motion (levels), largest shift tried (px)
+TEMPORAL_SHARE = 0.25         # the texture counts as present when at least this share of the pairs reach TEMPORAL_PRESENT: a reference that redraws
+                              # its texture in one of two worlds (paper scenes among space scenes) is caught, one clean stretch among texture does not hide it
+LIGHT_LUMA = 119              # a frame is in the light world when its median luma is at least this (L* 50)
+TEMPORAL_LEVEL = 1.0          # luma levels: a small scale change smaller than this is not a visible change
+TEMPORAL_PRESENT = 0.10       # share of static pixels that change; chosen from synthetic videos (see tests): clean static or moving video, fixed texture, drifting
+                              # glows, banded or dithered gradients, twinkling specks, particles, fast shapes and motion blur all measure 0.00 to 0.06; a paper
+                              # texture (sigma 4) redrawn every other frame measures 0.2 after compression; sigma 1.5 (barely visible) measures 0.01, below it
+WORLD_MIN = 0.25             # each of a light and a dark group must cover this share of the sampled frames to count as two worlds
 CUT_DIFF = 0.2                # a consecutive frame pair whose mean difference is above this is a cut, not motion
 MOTION_FPS, MOTION_MAX_S = 10, 180
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
@@ -275,6 +285,88 @@ def motion(ffmpeg, video):
     return float(d.mean()), float(calm.mean()) if len(calm) else 0.0
 
 
+# ------------------------------------------------------------------ temporal texture (boil)
+def _box(a, k):
+    """k x k box mean of a 2D array (edge padded), k odd"""
+    r = k // 2
+    p = np.pad(a, r, mode="edge")
+    H, W = a.shape
+    return sum(p[i:i + H, j:j + W] for i in range(k) for j in range(k)) / (k * k)
+
+
+def _cells(a, c):
+    h, w = (a.shape[0] // c) * c, (a.shape[1] // c) * c
+    return a[:h, :w].reshape(h // c, c, w // c, c).mean((1, 3))
+
+
+def boil_between(a, b):
+    """how much of the static area changes between two consecutive gray frames, or None when
+    nothing is static. Flat cells (no variation at all in either frame) are left out. Static means: no coarse change (a fade, a camera move or a moving object changes cells at the scale of
+    16 px), none in the neighbouring cells, and no small shift of the picture (up to 3 px, a slow pan) explains the change.
+    The measure is the share of pixels in the static cells whose change, after a 5x5 box mean is taken out (the small scale part),
+    is at least TEMPORAL_LEVEL luma level, the smallest change that is more than quantisation. A redrawn paper or grain texture
+    changes a broad share of the area; twinkling specks, drifting glows and banding or dither flicker of a gradient change a few per cent."""
+    a, b = np.asarray(a, np.float64), np.asarray(b, np.float64)
+    d = b - a
+    c = TEMPORAL_CELL
+    moving = _cells(np.abs(_box(d, 5)), c) > TEMPORAL_MOVE
+    moving |= np.abs(_cells(d, c)) > TEMPORAL_MOVE
+    sad0 = _cells(np.abs(d), c)
+    best = sad0.copy()
+    for dy in range(-TEMPORAL_SHIFT, TEMPORAL_SHIFT + 1):
+        for dx in range(-TEMPORAL_SHIFT, TEMPORAL_SHIFT + 1):
+            if dx or dy:
+                best = np.minimum(best, _cells(np.abs(b - np.roll(a, (dy, dx), axis=(0, 1))), c))
+    moving |= (best < 0.7 * sad0) & (sad0 > 0.3)                     # a shifted copy explains it: the picture moved
+    p = np.pad(moving, 1, constant_values=False)
+    near = sum(p[i:i + moving.shape[0], j:j + moving.shape[1]] for i in range(3) for j in range(3)) > 0
+    flat = (np.sqrt(np.maximum(_cells(a * a, c) - _cells(a, c) ** 2, 0)) < 0.05) & (np.sqrt(np.maximum(_cells(b * b, c) - _cells(b, c) ** 2, 0)) < 0.05)
+    static = ~near & ~flat                      # drawn flat areas (bars, plain fills) carry no texture to judge
+    if not static.any():
+        return None
+    hit = (np.abs(d - _box(d, 5)) >= TEMPORAL_LEVEL).astype(np.float64)
+    return float(np.mean(_cells(hit, c)[static]))
+
+
+def read_gray(ffmpeg, video, t, n):
+    """n consecutive frames from time t, as gray float arrays of TEMPORAL_H x TEMPORAL_W"""
+    W, H = TEMPORAL_W, TEMPORAL_H
+    raw = run([ffmpeg, "-loglevel", "error", "-ss", f"{t:.3f}", "-i", str(video), "-an", "-vf", f"scale={W}:{H}:flags=area,format=gray",
+               "-frames:v", str(n), "-f", "rawvideo", "-"]).stdout
+    k = len(raw) // (W * H)
+    return [np.frombuffer(raw[i * W * H:(i + 1) * W * H], np.uint8).reshape(H, W).astype(np.float64) for i in range(k)]
+
+
+def temporal_texture(ffmpeg, video, dur, fps, cuts, pairs=TEMPORAL_PAIRS):
+    """frame to frame change of static regions, median over pairs spread over the video and away from cuts. Each pair is the larger
+    of (n, n+1) and (n+1, n+2), so a drawing that changes every second frame (on twos) is seen too."""
+    step = 1.0 / max(fps, 1.0)
+    cand = [dur * (i + 0.5) / (pairs * 3) for i in range(pairs * 3)]
+    ok = [t for t in cand if t + 3 * step < dur and all(not (t - 0.3 <= c <= t + 3 * step + 0.3) for c in cuts)]
+    pick = [ok[i] for i in np.unique(np.linspace(0, len(ok) - 1, min(pairs, len(ok))).round().astype(int))] if ok else []
+    vals, detail = [], []
+    for t in pick:
+        f = read_gray(ffmpeg, video, t, 3)
+        if len(f) < 3:
+            continue
+        v = [x for x in (boil_between(f[0], f[1]), boil_between(f[1], f[2])) if x is not None]
+        if v:
+            vals.append(max(v))
+            detail.append({"value": round(max(v), 3), "world": "light" if float(np.median(f[0])) >= LIGHT_LUMA else "dark"})
+    share = float(np.mean([v >= TEMPORAL_PRESENT for v in vals])) if vals else 0.0
+    return {"value": round(float(np.median(vals)), 3) if vals else 0.0, "pairs": len(vals), "per_pair": [round(v, 3) for v in vals],
+            "share_of_pairs": round(share, 3), "present": bool(vals and share >= TEMPORAL_SHARE), "threshold": TEMPORAL_PRESENT, "share_needed": TEMPORAL_SHARE,
+            "pairs_detail": detail}
+
+
+def temporal_of(pairs):
+    """summary of a list of {"value", "world"} pairs (all pairs, or the pairs of one world)"""
+    vals = [p["value"] for p in pairs]
+    share = float(np.mean([v >= TEMPORAL_PRESENT for v in vals])) if vals else 0.0
+    return {"value": round(float(np.median(vals)), 3) if vals else 0.0, "pairs": len(vals), "share_of_pairs": round(share, 3),
+            "present": bool(vals and share >= TEMPORAL_SHARE), "threshold": TEMPORAL_PRESENT, "share_needed": TEMPORAL_SHARE}
+
+
 # ------------------------------------------------------------------ measuring
 def measure_arrays(frames, video_info=None, sources=None):
     """frames: list of (H, W, 3) uint8 arrays. Returns the look-reference dict (without the CSS)."""
@@ -291,6 +383,14 @@ def measure_arrays(frames, video_info=None, sources=None):
         flats.append(fl)
         edges.append(edge_density(y))
     palette = palette_of(np.concatenate(thumbs))
+    worlds, groups = find_worlds(thumbs)
+    if worlds["two_worlds"]:                       # texture is judged inside each world: a paper world among night scenes is not diluted
+        pairs = ((video_info or {}).get("temporal_texture") or {}).get("pairs_detail", [])
+        for name in ("light", "dark"):
+            idx = groups[name]
+            worlds[name]["palette"] = palette_of(np.concatenate([thumbs[i] for i in idx]))
+            worlds[name]["grain"] = grain_summary([stds[i] for i in idx], [flats[i] for i in idx])
+            worlds[name]["temporal_texture"] = temporal_of([q for q in pairs if q["world"] == name]) if video_info else None
     bg = palette[0]
     L = bg["lab"][0]
     best = None
@@ -309,6 +409,7 @@ def measure_arrays(frames, video_info=None, sources=None):
         "contrast": {"best_pair": pair},
         "grain": grain_summary(stds, flats),
         "edge_density": round(float(np.mean(edges)), 4),
+        "worlds": worlds,
         "video": video_info,
         "method": {"palette": f"k-means in Lab, k={K}, seed {SEED}, 6 restarts, pixels sampled from thumbnails 128 px wide (nearest neighbour, so no blended edge colours)",
                    "grain": f"std of 3x3 box blur residual in flat {BLOCK} px blocks, present at {GRAIN_PRESENT} or more",
@@ -338,6 +439,19 @@ def trim_bars(frames):
     if area_cut < BAR_MIN_AREA or (1 - area_cut) < BAR_KEEP_AREA:
         return frames, 0, 0
     return [f[~rows][:, ~cols] for f in frames], int(rows.sum()), int(cols.sum())
+
+
+def find_worlds(thumbs):
+    """a reference can live in two worlds (a paper scene and a night scene). A frame is light when its median L* is 50 or more.
+    Two worlds: both a light and a dark group cover at least WORLD_MIN of the frames. Each group gets its own background colour."""
+    med = [float(np.median(srgb_to_lab(t[:: max(1, len(t) // 2000)])[:, 0])) for t in thumbs]
+    out, groups = {}, {}
+    for name, sel in (("light", [i for i, m in enumerate(med) if m >= 50]), ("dark", [i for i, m in enumerate(med) if m < 50])):
+        groups[name] = sel
+        bgc = palette_of(np.concatenate([thumbs[i] for i in sel]), k=3)[0]["hex"] if sel else None
+        out[name] = {"share": round(len(sel) / len(thumbs), 4), "background": bgc}
+    out["two_worlds"] = bool(out["light"]["share"] >= WORLD_MIN and out["dark"]["share"] >= WORLD_MIN)
+    return out, groups
 
 
 def load_image(path):
@@ -371,7 +485,8 @@ def measure_files(ffmpeg, ffprobe, files):
                 frames.extend(vf)
             cuts = count_cuts(ffmpeg, p)
             me, me_calm = motion(ffmpeg, p)
-            vids.append({"file": p.name, "fps": round(fps, 3), "duration": round(dur, 3), "cuts": len(cuts),
+            tt = temporal_texture(ffmpeg, p, dur, fps, cuts)
+            vids.append({"temporal_texture": tt, "file": p.name, "fps": round(fps, 3), "duration": round(dur, 3), "cuts": len(cuts),
                          "cuts_per_minute": round(len(cuts) / dur * 60, 2), "motion_energy": round(me, 4),
                          "motion_energy_without_cuts": round(me_calm, 4)})
             sources.append({"file": p.name, "kind": "video", "frames": len(got), "black_rows_removed": br, "black_columns_removed": bc})
@@ -383,7 +498,11 @@ def measure_files(ffmpeg, ffprobe, files):
     if vids:
         tot = sum(v["duration"] for v in vids)
         wmean = lambda k: round(sum(v[k] * v["duration"] for v in vids) / tot, 4)
-        info = {"fps": round(sum(v["fps"] * v["duration"] for v in vids) / tot, 3), "cuts_per_minute": round(sum(v["cuts"] for v in vids) / tot * 60, 2),
+        allpairs = [q for v in vids for q in v["temporal_texture"].pop("pairs_detail")]
+        tw = round(sum(v["temporal_texture"]["value"] * v["duration"] for v in vids) / tot, 3)
+        sh = round(sum(v["temporal_texture"]["share_of_pairs"] * v["duration"] for v in vids) / tot, 3)
+        info = {"temporal_texture": {"value": tw, "share_of_pairs": sh, "present": sh >= TEMPORAL_SHARE, "threshold": TEMPORAL_PRESENT, "share_needed": TEMPORAL_SHARE,
+                                     "pairs": sum(v["temporal_texture"]["pairs"] for v in vids), "pairs_detail": allpairs}, "fps": round(sum(v["fps"] * v["duration"] for v in vids) / tot, 3), "cuts_per_minute": round(sum(v["cuts"] for v in vids) / tot * 60, 2),
                 "motion_energy": wmean("motion_energy"), "motion_energy_without_cuts": wmean("motion_energy_without_cuts"), "files": vids}
     return measure_arrays(frames, info, sources)
 
@@ -391,13 +510,26 @@ def measure_files(ffmpeg, ffprobe, files):
 # ------------------------------------------------------------------ the look
 INK_MIN = 4.5
 INK_MAX_CHROMA = 35.0
-def grain_svg(dark):
+def grain_svg(dark, suffix=""):
     """a static noise layer (same in every frame): light specks on a dark look, dark specks on a light one; no network, no script"""
     v = 1 if dark else 0
-    return ('<svg class="grain-overlay" width="100%" height="100%"><filter id="grainf" x="0" y="0" width="100%" height="100%">'
+    return (f'<svg class="grain-overlay{suffix}" width="100%" height="100%"><filter id="grainf{suffix}" x="0" y="0" width="100%" height="100%">'
             '<feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" stitchTiles="stitch"/>'
             f'<feColorMatrix type="matrix" values="0 0 0 0 {v}  0 0 0 0 {v}  0 0 0 0 {v}  1.6 0 0 0 -0.45"/></filter>'
-            '<rect width="100%" height="100%" filter="url(#grainf)"/></svg>')
+            f'<rect width="100%" height="100%" filter="url(#grainf{suffix})"/></svg>')
+
+
+def paper_svg(dark, suffix=""):
+    """a static mottled paper texture: light mottling on a dark look, dark mottling on a light one"""
+    v = 1 if dark else 0
+    return (f'<svg class="paper-overlay{suffix}" width="100%" height="100%"><filter id="paperf{suffix}" x="0" y="0" width="100%" height="100%">'
+            '<feTurbulence type="fractalNoise" baseFrequency="0.035 0.06" numOctaves="4" seed="11" stitchTiles="stitch"/>'
+            f'<feColorMatrix type="matrix" values="0 0 0 0 {v}  0 0 0 0 {v}  0 0 0 0 {v}  2.4 0 0 0 -0.9"/></filter>'
+            f'<rect width="100%" height="100%" filter="url(#paperf{suffix})"/></svg>')
+
+
+def paper_opacity(t):
+    return round(min(0.15, 0.05 + 0.08 * t), 3)
 
 
 def grain_opacity(g):
@@ -522,8 +654,44 @@ def font_words(ref):
     return "Manrope 800 for headlines with Inter for text (bundled); for a hand drawn feel add one open licence font in src/assets/fonts/ with an @font-face."
 
 
+def world_texture(ref, name=None):
+    """(grain summary, temporal summary or None) for the whole reference, or for one world of a two world reference"""
+    if name is not None and ref["worlds"]["two_worlds"]:
+        w = ref["worlds"][name]
+        return w["grain"], w.get("temporal_texture")
+    return ref["grain"], (ref.get("video") or {}).get("temporal_texture")
+
+
+def texture_lines(g, tt, dark, suffix=""):
+    """the comment and the rules for one world's texture: redrawn (boil) paper and static grain. `suffix` names the classes of a second world"""
+    lines = []
+    if tt and tt["present"]:
+        lines += [
+            f"/* Boil: the reference redraws its texture from one frame to the next (in {round(tt['share_of_pairs'] * 100)}% of the sampled frame pairs, {round(tt['threshold'] * 100)}% or more of the static area changes by at least {TEMPORAL_LEVEL:g} luma level),",
+            "   the mark of hand drawn animation, which a single frame cannot show. Two ways, both deterministic:",
+            "   1. Sketch kit (template/sketch.js): const K = SK.create(document.getElementById(\"cv\")); call K.frame(t) first in every render, then K.paperBG() for the paper;",
+            "      the line boil and hatching change 10 times a second by themselves (on twos in a 24 fps render: render(Math.floor(t * 12) / 12)).",
+            "   2. A static paper overlay: add this once inside the element of that world, above the scenes, as the last child:",
+            "   " + paper_svg(dark, suffix) + " */",
+            f"#root .paper-overlay{suffix}{{position:absolute;left:0;top:0;pointer-events:none;opacity:{paper_opacity(tt['value'])}}}",
+        ]
+    if g["present"]:
+        lines += [
+            f"/* Grain: the reference carries grain ({g['value']} luma levels in flat areas), which a flat page cannot show by itself. Add this once inside the element of that world,",
+            "   above the scenes, as the last child (a static noise, the same in every frame, so renders stay identical):",
+            "   " + grain_svg(dark, suffix),
+            "   For a paper or hand drawn feel use the sketch kit instead: SK.create(canvas).paperBG() (template/sketch.js). */",
+            f"#root .grain-overlay{suffix}{{position:absolute;left:0;top:0;pointer-events:none;opacity:{grain_opacity(g['value'])}}}",
+        ]
+    if not lines:
+        lines.append(f"/* Texture: this world is clean (grain {g['value']}, below {g['threshold']}; no redrawn texture), so none is added. */")
+    return lines
+
+
 def render_css(ref):
     v, notes, ink_info = derive_look(ref)
+    w = ref.get("worlds")
+    two = bool(w and w["two_worlds"])
     g = ref["grain"]
     lines = [
         "/* Custom look drafted from a reference by `studio look`. It loads after looks.css and its selectors carry the id, so these",
@@ -531,8 +699,13 @@ def render_css(ref):
         "   Edit freely; running `look --from` again rewrites this file (the previous one is kept as look.previous.css). */",
         f"/* measured: background {ref['background']['hex']} ({ref['mode']}, L* {ref['background']['lightness']}), ink {ink_info['hex']} at contrast {ink_info['ratio']} : 1,",
         f"   grain {g['value']} (texture threshold {g['threshold']}), edge density {ref['edge_density']}"
-        + (f", {ref['video']['fps']} fps, {ref['video']['cuts_per_minute']} cuts per minute, motion energy {ref['video']['motion_energy']}" if ref.get("video") else "") + " */",
+        + (f", {ref['video']['fps']} fps, {ref['video']['cuts_per_minute']} cuts per minute, motion energy {ref['video']['motion_energy']}, temporal texture {ref['video']['temporal_texture']['value']}" if ref.get("video") else "") + " */",
     ]
+    other = "light" if ref["mode"] == "dark" else "dark"
+    if two:
+        lines.append(f"/* Two worlds: the reference has {round(w['light']['share'] * 100)}% light frames (background {w['light']['background']}) and "
+                     f"{round(w['dark']['share'] * 100)}% dark frames (background {w['dark']['background']}). The variables below are the {ref['mode']} world; the {other} world is the "
+                     f"block `#root .world-2` further down: put class=\"world-2\" on the scenes that belong to it. */")
     for n in notes:
         lines.append(f"/* note: {n} */")
     lines.append("#root, #root[data-look]{")
@@ -543,18 +716,23 @@ def render_css(ref):
               "/* Fonts (edit): " + font_words(ref) + " */",
               "#root[data-look]{font-family:var(--b-font)}",
               "#root[data-look] .h1{font-family:var(--h-font);font-weight:var(--h-weight)}"]
-    lines += ["/* Motion (edit), " + w + " */" for w in motion_words(ref)]
-    if g["present"]:
-        op = grain_opacity(g["value"])
-        lines += [
-            f"/* Grain: the reference carries grain ({g['value']} luma levels in flat areas), which a flat page cannot show by itself. Add this once inside #root,",
-            "   above the scenes, as the last child (a static noise, the same in every frame, so renders stay identical):",
-            "   " + grain_svg(ref["mode"] == "dark"),
-            "   For a paper or hand drawn feel use the sketch kit instead: SK.create(canvas).paperBG() (template/sketch.js). */",
-            f"#root .grain-overlay{{position:absolute;left:0;top:0;pointer-events:none;opacity:{op}}}",
-        ]
-    else:
-        lines.append(f"/* Grain: the reference is clean (grain {g['value']}, below {g['threshold']}), so no texture is added. */")
+    lines += ["/* Motion (edit), " + m + " */" for m in motion_words(ref)]
+    mg, mt = world_texture(ref, ref["mode"]) if two else (g, (ref.get("video") or {}).get("temporal_texture"))
+    lines += texture_lines(mg, mt, ref["mode"] == "dark")
+    if two:
+        sub = {"palette": w[other]["palette"], "mode": other, "edge_density": ref["edge_density"]}
+        valt, notes_alt, info_alt = derive_look(sub)
+        w[other]["look"] = valt
+        w[other]["contrast"] = {"ink": info_alt}
+        lines.append(f"/* The {other} world (background {valt['--bg']}, ink {info_alt['hex']} at {info_alt['ratio']} : 1). Same variables as above; the class works on any element,")
+        lines.append("   and children inherit it. Its own texture follows. */")
+        lines += [f"/* note: {n} */" for n in notes_alt]
+        lines.append("#root .world-2{")
+        lines += [f"  {k}:{val};" for k, val in valt.items()]
+        lines.append("  color:var(--ink);background:var(--bg)")
+        lines.append("}")
+        sg, st = world_texture(ref, other)
+        lines += texture_lines(sg, st, other == "dark", "-2")
     return "\n".join(lines) + "\n", v, ink_info
 
 

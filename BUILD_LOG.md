@@ -337,3 +337,48 @@ T16b "Use Synergy Studio to improve this video: add word captions and an end car
      word captions and an end card
 ```
 T16, T16b: PASS. L8: PASS.
+
+## L9: the video tests (T7 to T13)
+
+Builds ran headless in Claude Code with only the plugin's tools, from a folder outside the repo:
+`claude -p "<prompt>" --model sonnet|opus --allowedTools "mcp__plugin_synergy-studio_synergy-studio__*" --disallowedTools
+"Bash,Edit,Write" --permission-mode dontAsk --output-format stream-json --verbose --max-turns 150`. Every build logged 0
+calls to Bash, Edit or Write. After each build the orchestrator ran `check` and the harness itself; a fresh sonnet
+worker then judged the stills against `references/review.md` or the frozen rubric, never the builder. A test got at most
+three judged rounds; the third round of T7 and T8 was built with the orchestrator's model (opus), as the prompt allows.
+
+T7, HAURA reel from the raw clips c1 to c4 and the four product photos (round 3, opus; evidence T7-2026-09-30-3):
+```
+PASS  duration: 41.60 s (timeline 41.5 s ± 0.15 s)
+PASS  audio against mix: lag 0 ms (0 frames), correlation 0.999; last 2 s match; no silent stretch where the mix has sound
+PASS  captions: 87 transcript words all in out/captions.json; earliest highlight 0 ms before its word (max 150)
+exit=0      (11 lines PASS)   captions coverage 93.0%; caption band difference 19.33
+falsifiers: captions removed -> coverage FAIL; audio delayed 3 frames -> check exit 2
+judge round 3: VERDICT: PASS (rounds 1 and 2 FAIL: small text, name tag, chips not shown)
+```
+T8, OneScan 16:9 explainer cut down to 9:16 (round 3, opus; evidence T8-2026-09-30-3):
+```
+PASS  captions: 68 transcript words all in out/captions.json; earliest highlight 0 ms before its word (max 150)
+exit=0      (11 lines PASS)   captions coverage 98.6%
+judge round 3: VERDICT: PASS; Task 2 (no on screen text or key object cut off) TRUE; craft item 16 FALSE with its reason
+falsifier crop_x 0 on every clip, stills at the build's own 22 times: VERDICT: TEXT CUT OFF (COUNTERFEIT, MANUFACTURER,
+the scan phone, the chips); with only the 6 default times it saw nothing cut off, so that run is not counted
+```
+T9 explainer (3-2-1 backup rule, 53.4 s): check 10 lines PASS, exit=0; judge PASS (every guard rail TRUE or N/A with a reason).
+T10 motion reel from `motion-reel.mp4` at 60 fps (round 2): check PASS; `converted copy: check exit 2; frame rate: FAIL 30 fps
+(project fps 60)`; judge: palette 5, type 4, generative 5, overlay 5, pace 5, overall 5, no copied text TRUE (round 1 FAIL:
+copied words).
+T11 doodle stills from `doodle-timeline.mp4` (round 2): line 4, paper 5, palette 5, lettering 5, devices 5, draw on 5, overall 5,
+original TRUE. The handwritten font (Caveat, OFL) was given as a user file, because the bundled fonts have no handwritten face.
+T12 style from the cosmos breakdown text only: check 10 lines PASS; ink 5, paper 5, boil 4, walk 4, zoom 5, cosmic 5, overall
+4; not a known character TRUE.
+T13 `look --from` on each of the five references: every look composes; palette and texture scores per round (onescan,
+haura, motion, doodle, cosmos): round 1 5/4, 5/4, 5/4, 5/4, 5/3; round 2 5/2, 5/4, 4/2, 5/4, 4/3; round 3 5/5, 5/4, 5/4,
+5/3, 5/4. Every reference reached 4 or more on both items in some round, never all five in one round: BLOCKED after three
+rounds. The orchestrator changed `look` between rounds (texture read over time, glow negatives, a card with two panes for a
+reference with a light and a dark world, paper and grain overlays drawn from the look's own markup); `node --test` and pytest
+cover the changes.
+
+Named gaps from L9: the T13 falsifier judge was not blind (the frozen rubric states the expected score); the T8 round 3
+judge cited five frames without opening them; the judged videos were rendered before the L10 render change.
+L9: T7, T8, T9, T10, T11, T12 PASS; T13 BLOCKED.

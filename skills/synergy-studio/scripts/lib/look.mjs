@@ -14,7 +14,8 @@ const FONTS = [["@fontsource/inter", "inter", [400, 500, 600, 700]], ["@fontsour
 // the file types look.py reads (its IMAGE_EXT and VIDEO_EXT; a test keeps the two lists equal)
 export const IMAGE_EXT = [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"];
 export const VIDEO_EXT = [".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi"];
-const GRAIN_SVG = /<svg class="grain-overlay"[\s\S]*?<\/svg>/;
+// texture layers a look.css can style; each is drawn on the card from the svg its comment holds
+const OVERLAYS = ["paper-overlay", "grain-overlay"];
 
 // `look <dir> --from a b c` or `look <dir> --card paper`; throws an Error with a plain message
 export function parseLookArgs(argv) {
@@ -49,23 +50,44 @@ export function lookCssProblems(css) {
   return problems;
 }
 
-// the card page for one look; `look` is the data-look value, `css` the text of a custom look.css or null
-export function cardHtml(template, look, css) {
+// the texture layers of one world, taken from the markup that look.css keeps in its comments; `suffix` is "" for the main world and "-2" for the second
+function textureOf(css, suffix) {
   let svg = "";
-  if (css !== null && /\.grain-overlay\s*\{/.test(css)) {
-    const m = css.match(GRAIN_SVG);
-    if (!m) throw new Error("look.css styles .grain-overlay but holds no grain overlay markup");
-    svg = m[0];
+  if (css === null) return svg;
+  for (const base of OVERLAYS) {
+    const cls = base + suffix;
+    if (!new RegExp(`\\.${cls}\\s*\\{`).test(css)) continue;
+    const m = css.match(new RegExp(`<svg class="${cls}"[\\s\\S]*?<\\/svg>`));
+    if (!m) throw new Error(`look.css styles .${cls} but holds no ${base.replace("-overlay", "")} overlay markup`);
+    svg += m[0];
   }
-  return template.replaceAll("{{LOOK}}", look).replaceAll("{{LOOKCSS}}", css !== null ? '<link rel="stylesheet" href="look.css">' : "").replaceAll("{{GRAIN}}", svg);
+  return svg;
+}
+
+// the card page for one look; `look` is the data-look value, `css` the text of a custom look.css or null.
+// One pane, or when look.css holds a `#root .world-2` block two panes side by side: the light world on the left, the dark on the right.
+// `lightIsSecond` says which of them is the world-2 block (true when the main variables are the dark world's).
+export function cardHtml(template, look, css, { lightIsSecond = false } = {}) {
+  const found = template.match(/<!--pane-->([\s\S]*?)<!--\/pane-->/);
+  if (!found) throw new Error("look-card.html has no pane markers");
+  const pane = found[1], page = template.replace(found[0], "");
+  const mk = (cls, texture) => pane.replace("{{PANECLASS}}", cls).replace("{{TEXTURE}}", texture);
+  const split = css !== null && /#root\s+\.world-2\s*\{/.test(css);
+  let panes;
+  if (!split) panes = mk("", textureOf(css, ""));
+  else {
+    const main = (side) => mk(`k-half ${side}`, textureOf(css, "")), second = (side) => mk(`k-half ${side} world-2`, textureOf(css, "-2"));
+    panes = lightIsSecond ? second("k-left") + main("k-right") : main("k-left") + second("k-right");
+  }
+  return page.replaceAll("{{LOOK}}", look).replaceAll("{{LOOKCSS}}", css !== null ? '<link rel="stylesheet" href="look.css">' : "").replaceAll("{{PANES}}", panes);
 }
 
 // one snapshot of the card with HyperFrames, saved as a JPEG at `out`
-export function renderCard(e, look, cssFile, out) {
+export function renderCard(e, look, cssFile, out, opts = {}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "look-card-"));
   try {
     const css = cssFile ? fs.readFileSync(cssFile, "utf8") : null;
-    fs.writeFileSync(path.join(tmp, "index.html"), cardHtml(fs.readFileSync(path.join(SKILL, "template", "look-card.html"), "utf8"), look, css));
+    fs.writeFileSync(path.join(tmp, "index.html"), cardHtml(fs.readFileSync(path.join(SKILL, "template", "look-card.html"), "utf8"), look, css, opts));
     copy(path.join(SKILL, "template", "looks.css"), path.join(tmp, "looks.css"));
     if (css !== null) copy(cssFile, path.join(tmp, "look.css"));
     copy(path.join(e.node_modules, "gsap", "dist", "gsap.min.js"), path.join(tmp, "gsap.min.js"));
@@ -90,8 +112,18 @@ export function summary(ref) {
   lines.push(`  palette      ${ref.palette.map(p => `${p.hex} ${Math.round(p.share * 100)}%`).join("  ")}`,
     `  background   ${ref.background.hex}, ${ref.mode} (L* ${n(ref.background.lightness, 1)})`,
     `  contrast     ink ${c.ink.hex} on the background ${n(c.ink.ratio, 2)} : 1${c.ink.adjusted ? ` (adjusted from ${c.ink.measured_hex}, ${n(c.ink.measured_ratio, 2)} : 1)` : ""}; best palette pair ${n(c.best_pair.ratio, 2)} : 1`,
-    `  grain        ${n(g.value)} luma levels in flat areas (${Math.round(g.flat_share * 100)}% of blocks flat), ${g.present ? `at or above ${g.threshold}: texture overlay written and drawn on the card` : `below ${g.threshold}: clean, no texture added`}`,
+    `  grain        ${n(g.value)} luma levels in flat areas (${Math.round(g.flat_share * 100)}% of blocks flat), ${ref.worlds && ref.worlds.two_worlds ? `over all frames; each world is judged below` : g.present ? `at or above ${g.threshold}: texture overlay written and drawn on the card` : `below ${g.threshold}: clean, no texture added`}`,
     `  edge density ${n(ref.edge_density, 4)} of pixels`);
+  const boil = (t) => t ? `${Math.round(t.share_of_pairs * 100)}% of ${t.pairs} frame pairs change at least ${Math.round(t.threshold * 100)}% of their static area (median ${n(t.value)}): ${t.present ? "redrawn texture" : "no redrawn texture"}` : "no video";
+  if (v) lines.push(`  boil         ${boil(v.temporal_texture)}`);
+  const w = ref.worlds;
+  if (w && w.two_worlds) {
+    lines.push(`  two worlds   light ${w.light.background} in ${Math.round(w.light.share * 100)}% of frames, dark ${w.dark.background} in ${Math.round(w.dark.share * 100)}%; look.css keeps the ${ref.mode} world as its variables and the other as \`#root .world-2\``);
+    for (const name of ["light", "dark"]) {
+      const x = w[name], drawn = x.grain.present || (x.temporal_texture && x.temporal_texture.present);
+      lines.push(`    ${name.padEnd(5)} grain ${n(x.grain.value)} (${x.grain.present ? "present" : "clean"}); boil ${x.temporal_texture ? `${Math.round(x.temporal_texture.share_of_pairs * 100)}% of ${x.temporal_texture.pairs} pairs` : "n/a"}; texture ${drawn ? "drawn on its half of the card" : "not drawn"}`);
+    }
+  }
   if (v) lines.push(`  video        ${n(v.fps, 2)} fps, ${n(v.cuts_per_minute, 2)} cuts per minute, motion energy ${n(v.motion_energy, 4)} (${n(v.motion_energy_without_cuts, 4)} without cuts)`);
   return lines.join("\n");
 }
@@ -104,7 +136,7 @@ function fromReference(e, d, files) {
   const cssFile = path.join(d, "src", "look.css"), ref = readJSON(path.join(d, "look-reference.json"));
   const problems = lookCssProblems(fs.readFileSync(cssFile, "utf8"));
   if (problems.length) die("the drafted look.css is incomplete: " + problems.join("; "));
-  renderCard(e, "custom", cssFile, path.join(d, "stills", "look-card.jpg"));
+  renderCard(e, "custom", cssFile, path.join(d, "stills", "look-card.jpg"), { lightIsSecond: ref.mode === "dark" });
   say(summary(ref));
   say(`  wrote look-reference.json, src/look.css${prior ? " (the earlier one is kept as src/look.previous.css)" : ""}, stills/look-card.jpg`);
   say("  LOOK at stills/look-card.jpg next to the reference (studio frames <video> makes its contact sheet), then edit src/look.css: fonts and motion are suggested in its comments.\n" +
