@@ -20,8 +20,8 @@ You don't need to run `compose` yourself: `stills` and `render` run it first.
 ## 2. Every command
 | Command | Arguments | What it does | Reads | Writes |
 |---|---|---|---|---|
-| `setup` | – | one-time install (about 1.1 GB, 5–10 min): Node packages (HyperFrames 0.8.92, GSAP, three.js, fonts, ffprobe), a Python venv (Kokoro, ONNX Runtime, numpy, soundfile), the voice model, ffmpeg, HyperFrames' Chrome | – | `$SYNERGY_STUDIO_HOME/…`, `env.json` |
-| `doctor` | – | checks the install; says what to fix | `env.json` | – |
+| `setup` | `[--whisper-model <ggml-*.bin>]` | one-time install (about 1.1 GB, 5–10 min): Node packages (HyperFrames 0.8.92, GSAP, three.js, fonts, ffprobe), a Python venv (Kokoro, ONNX Runtime, numpy, soundfile), the voice model, ffmpeg, HyperFrames' Chrome; then captions: whisper-cli (on PATH, or built from github.com/ggml-org/whisper.cpp with cmake + a C compiler) and the Whisper `small.en` model (about 466 MB, from huggingface.co). Captions are optional: if they fail, setup still succeeds and says why. `--whisper-model f` installs a model file you downloaded elsewhere (also works after setup) | – | `$SYNERGY_STUDIO_HOME/…`, `env.json`, `~/.cache/hyperframes/whisper/` |
+| `doctor` | – | checks the install; FAIL lines must be fixed, WARN lines (captions) are optional; each says the fix | `env.json` | – |
 | `new` | `<dir> [--mode narrated\|footage\|film] [--aspect 16:9\|9:16\|1:1\|4:5] [--platform …] [--length s] [--look paper\|midnight\|bold\|luxe]` | project skeleton. Aspect defaults to 16:9; 9:16 defaults to platform `tiktok`; the length defaults to 30 s (9:16) or 60 s | `template/` | `project.json`, `src/index.html`, `src/assets/`, `brief.md`, `shots.md`, `feedback.md` (+ `src/footage/` for footage) |
 | `budget` | `<dir>` | narrated: how many words fit, per scene and in total, for `length` | project.json | – |
 | `say` | `<dir> "text" [--voice id]` | narrated: speaks one line to check a pronunciation | project.json (`lexicon`, `voice`) | `audio/say.wav` |

@@ -26,7 +26,9 @@ and `film` (wordless, music-driven). `studio new <dir> --mode …` makes the rig
 
 ## 0. Setup (once per computer)
 `studio doctor`. If it says "not set up": tell the user it downloads about 1 GB once (5–10 minutes), then
-`studio setup`. It prints download links if Node or Python is missing.
+`studio setup`. It prints download links if Node or Python is missing. Captions from speech (`transcribe`) also
+need Whisper (about 0.5 GB more); `setup` prepares it and `doctor` shows WARN lines with the fix if it could not.
+Everything else works without it.
 
 ## 1. Understand the job (references/intake.md)
 First name the **kind**: ad · explainer · footage edit · story/film · art or music piece. The business frame

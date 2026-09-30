@@ -41,7 +41,8 @@ animation.
 3. `studio cut <dir>` → `src/assets/base.mp4` (reframed to the aspect, no audio), `audio/voice.wav`,
    and `cuts.json` (where each clip starts in the edit).
 4. `studio transcribe <dir>` → `transcript.json` word timings (Whisper small.en, offline after the first
-   model download from huggingface.co; or `studio transcribe <dir> subs.srt` to import captions).
+   model download from huggingface.co; `studio doctor` shows whether captions are ready and the fix if not;
+   or `studio transcribe <dir> subs.srt` to import captions).
    Read it, fix misheard names in `caption_fixes`, and set `scenes` from the sentences.
 5. `studio audio <dir>` (voice + ducked music + effects), then write `src/index.html`:
 ```html

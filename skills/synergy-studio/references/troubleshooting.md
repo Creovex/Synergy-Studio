@@ -13,7 +13,7 @@
 | Video longer than planned | pauses between scenes count too | `studio audio` prints narration vs pauses; cut words or lower pre/post/tail |
 | Captions under the TikTok side buttons | old caption margins | `captions()` now clears the platform's side band; override with `left`/`right` |
 | Loudness about 1 dB low in the MP4 | AAC encoding | handled: `studio render` re-normalises the final file |
-| `studio transcribe` fails with HTTP 403 | the network blocks huggingface.co (first model download) | use another network once, or import captions: `studio transcribe <dir> subs.srt` |
+| `studio transcribe` fails ("Download failed: HTTP 403", or whisper-cli missing) | the Whisper model comes from huggingface.co once, and the whisper-cli program must be on PATH or built with cmake + a C compiler | `studio doctor` shows which part is missing and the fix. Blocked network: download `ggml-small.en.bin` elsewhere and run `studio setup --whisper-model <file>`; or import captions: `studio transcribe <dir> subs.srt` |
 | A script hangs when it calls `page.evaluate(() => tl.seek(t))` | Playwright tries to send the GSAP timeline back | return nothing: `() => { tl.seek(t); }` (only if you write your own Playwright code) |
 | Captions unreadable on bright footage | white text without backing | `captions()` adds a dark pill by default; keep it |
 | Beat grid wrong | run on a mix with voice, or half/double tempo | run `studio beats` on the song file; check that `bpm` sounds right |
@@ -27,3 +27,4 @@
 | An SVG character or group vanishes when animated | GSAP replaces the `transform` attribute of an SVG `<g>` (its `translate(x y)` is lost) | position with an outer `<g transform="translate(…)">`, animate an inner `<g id>` |
 | `studio words` says "no timing.json yet" | words needs the scene timing | run `studio audio <dir>` first, then `studio words`, then set the events and run `studio audio` again |
 | A deterministic "random" is needed (rain, stars) | `Math.random` changes every render | use a fixed hash, e.g. `x = sin(i*127.1 + j*311.7)*43758.5453; x - floor(x)` |
+| Beat grid a few ms early | onset detection | `studio beats` is accurate to about 10 ms (a third of a frame) and keeps a beat at 0 s; nudge events by hand only if a hit looks late |
