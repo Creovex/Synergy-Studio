@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { SKILL, SAFE, SIZES, LOOKS, die, say, parseArgs } from "./common.mjs";
 
+const PLATFORMS = [...Object.keys(SAFE), "youtube", "linkedin", "x", "website"];
 export const USAGE = "new <dir> [--mode narrated|footage|film] [--aspect 16:9|9:16|1:1|4:5] [--platform tiktok|reels|shorts|meta|youtube|linkedin|x|website] [--length 30] [--look paper|midnight|bold|luxe]";
 
 // ---------------------------------------------------------------- new
@@ -13,9 +14,9 @@ function newProject(dir, opts) {
   const d = path.resolve(dir);
   if (fs.existsSync(path.join(d, "project.json"))) die(`${d} already has a project`);
   const aspect = opts.aspect || "16:9"; if (!SIZES[aspect]) die("aspect must be one of " + Object.keys(SIZES).join(", "));
-  fs.mkdirSync(path.join(d, "src", "assets"), { recursive: true });
   const plat = opts.platform || (aspect === "9:16" ? "tiktok" : "");
-  if (plat && !SAFE[plat] && !["youtube", "linkedin", "x", "website"].includes(plat)) die("platform must be tiktok, reels, shorts, youtube, linkedin, x or website");
+  if (plat && !PLATFORMS.includes(plat)) die("platform must be " + PLATFORMS.slice(0, -1).join(", ") + " or " + PLATFORMS[PLATFORMS.length - 1]);
+  fs.mkdirSync(path.join(d, "src", "assets"), { recursive: true });
   const proj = { name: path.basename(d), aspect, platform: plat, length: +(opts.length || (aspect === "9:16" ? 30 : 60)), fps: 30, voice: "af_heart", speed: 0.95, music: "warm", ...(aspect === "9:16" ? { lead: 0.4, pre: 0.3, post: 0.7, tail: 2.0 } : { lead: 0.9, pre: 0.6, post: 1.2, tail: 2.5 }),
     lexicon: {}, scenes: [
       { id: "s1", say: "Replace this with the hook: one sentence that makes people care." },

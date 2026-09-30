@@ -185,3 +185,45 @@ true peak lines changed, all toward the target: hydration-tips -14.3 to -14 LUFS
 footage-captions -14.1 to -14 LUFS. No render log names fonts.googleapis.com or fonts.gstatic.com (grep count 0 each).
 The L4 renders are the new baseline (`baseline/after-L4`).
 T2: PASS. L4: PASS.
+
+## L5: footage, look, checks and the test harness
+
+Workers (all sonnet): implementer D (`import` new; `cut` with `crop_x`, the 7.9 C warning and frame exact clips; `transcribe`
+with the heavy lock, the whisper check, plain errors and onset snapping in `lib/wordsnap.mjs`; `check` with frame rate,
+audio against mix and captions lines and `kind: hyperframes`; `scripts/syncaudio.py`), implementer E (`look` new, `look.py`,
+`template/look-card.html`), implementer I (`test/harness/`: captions coverage, caption band difference, late audio clip,
+late beep synctest, 3 frame delayed MP4, crop_x 0 variant, 30 fps conversion, T4 fixture and scorer, T6 determinism,
+T0 contract script). Independent verifiers for B's, D's and E's parts (sonnet, behaviour only; their scripts are kept in the
+ledger). Defects they found and that were fixed: `cut` dropped one frame per clip (picture drifted up to 3 frames ahead of
+the sound); `check` passed an MP4 whose audio stopped 2 s early; muted MP4 lines printed NaN; clip paths resolved against
+the current folder; `caption_fixes` keys with spaces did nothing (the owner's footage example uses one); `pop` captions lost
+their spacing; `/* */` comments were linted; `look` read grain on hard colour edges and let card contrast fall under 4.5.
+Orchestrator glue: `import` and `look` in the dispatcher; `stills` keeps look cards and the source sheet across the
+HyperFrames snapshot, which empties its output folder.
+First transcription on this Mac: HyperFrames downloaded `ggml-small.en.bin` (487,614,201 bytes) from huggingface.co in
+about 51 s; the manual fallback was not needed.
+
+Orchestrator reruns (evidence T0, T3, T4, T6, T7s, L5-suites, L5-compare), literal excerpts:
+```
+T0  t0-contract.mjs reference/lite-branch/skills/synergy-studio --run: 109 items: 109 PASS, 0 FAIL  exit=0
+    falsifier: PASS falsifier: text with an added line "run `studio fly <dir>`" fails on `studio fly`
+T3  cut: src/assets/base.mp4 (1080x1920, 15.17 s ...); transcribe: transcript.json written (31 words)
+    So,@0.22 if@0.44 you@0.71 love@0.97 smelling@1.43 good,@2.32 follow@3.17 Hara@3.82 Sense@4.31 and@5.04 ...
+    falsifier: ERROR: empty.wav has no sound in it (it is empty, 0 seconds long), so there is nothing to transcribe. exit=1
+T4  attempt 1: PASS median onset error: 31 ms; FAIL 95th percentile onset error: 345 ms (need at most 200 ms)
+    attempt 2: PASS median onset error: 4 ms (need at most 80 ms)
+               PASS 95th percentile onset error: 6 ms (need at most 200 ms); 0 word(s) missing
+    falsifier: evenly spaced timings: median error 257 ms, 95th percentile 517 ms: the scorer rejects them
+T6  PASS sketch page rendered twice (rng 1): identical x3; PASS falsifier: rng 2: 3 of 3 frames differ;
+    PASS hydration-tips rendered twice: frames at 1, 14.114, 27.227 s: identical x3
+T7s PASS synctest ... mean offset 0 ms; falsifier --beep-offset 3: exit=2
+    cut on a clip whose audio starts 0.176 s late (0.2 s asked; AAC padding): "warning: ... the audio starts 0.176 s
+    after the picture ..." with an -itsoffset fix; cut on the clean clip: no warning
+suites: node --test test/*.test.mjs: ℹ tests 136 ℹ pass 136 ℹ fail 0; pytest tests: 111 passed in 10.20s
+```
+Examples against the L4 baseline: all check lines PASS, including the new frame rate, audio against mix (lag 0 ms,
+correlation 0.997 to 0.999) and captions (35 of 35 words) lines; frames identical for hydration-tips and three-product;
+footage-captions at 12.1 s differs by 1.97 (limit 1.0): the same picture shifted by the frame exact cut fix (inspected
+side by side), accepted as the corrected result. `baseline/after-L5` is the new baseline.
+Gap named: T4's onset snapping was developed with the T4 fixture in view; real speech has no ground truth here.
+T0, T3, T4, T6, T7s: PASS. L5: PASS.

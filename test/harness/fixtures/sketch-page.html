@@ -1,0 +1,48 @@
+<!doctype html>
+<html><head><meta charset="UTF-8">
+<script src="gsap.min.js"></script>
+<script src="timing.js"></script>
+<script src="words.js"></script>
+<script src="lib.js"></script>
+<script src="sketch.js"></script>
+<style>
+html,body{width:{{W}}px;height:{{H}}px;margin:0;background:#ECE9E2}
+#root{position:relative;width:{{W}}px;height:{{H}}px;overflow:hidden}
+.scene{position:absolute;left:0;top:0;right:0;bottom:0}
+#cv{position:absolute;left:0;top:0}
+</style></head>
+<body>
+<div id="root" data-composition-id="main" data-width="{{W}}" data-height="{{H}}" data-fps="{{FPS}}" data-duration="{{TOTAL}}">
+  <div id="s1" class="scene clip" data-start="{{s1.start}}" data-duration="{{s1.dur}}" data-track-index="1"></div>
+  <canvas id="cv" width="{{W}}" height="{{H}}"></canvas>
+  <audio id="mix" src="audio/mix.wav" data-start="0" data-duration="{{TOTAL}}" data-track-index="99"></audio>
+</div>
+<script>
+(function () {
+  const {tl, finish} = SS.start({cuts: "hard"});
+  const K = SK.create(document.getElementById("cv"));
+  const {ink, rr, ell, circ, tube, cam, paperBG} = K;
+  // every position comes from the kit's seeded generator, drawn once, before any frame
+  const rand = K.rng({{SEED}});
+  const FILL = ["#D9774F", "#5B8E7D", "#E2B33D", "#6A7FB5"], HATCH = ["#A4482C", "#2F5D4E", "#9C7414", "#3A4C82"];
+  const items = Array.from({length: 16}, (_, i) => ({x: 200 + rand() * (K.W - 400), y: 160 + rand() * (K.H - 320), w: 140 + rand() * 220, h: 100 + rand() * 180, phase: rand() * 6.28, kind: i % 3}));
+  function render(t) {
+    K.frame(t);                                            // clears the frame and steps the line boil
+    paperBG();                                             // paper grain
+    cam(1.03 + 0.02 * t, K.W / 2, K.H / 2);
+    items.forEach((it, i) => {
+      const y = it.y + 40 * Math.sin(t * 1.3 + it.phase);
+      const path = it.kind === 0 ? rr(it.x - it.w / 2, y - it.h / 2, it.w, it.h, 14, i + 1) : it.kind === 1 ? ell(it.x, y, it.w / 2, it.h / 2) : circ(it.x, y, it.h / 2);
+      ink(path, FILL[i % 4], HATCH[i % 4], {lw: 5});       // fill, crayon hatching and a wobbling ink outline
+    });
+    const wave = Array.from({length: 40}, (_, j) => [120 + j * 44, K.H * 0.86 + 30 * Math.sin(j * 0.5 + t * 2) + 6 * (K.hash(j, K.boil) - 0.5)]);
+    tube(wave, "#2A1D17", 8, "#5B544C");                   // a scribbled line that boils
+  }
+  const st = {t: 0};
+  tl.to(st, {t: {{TOTAL}}, duration: {{TOTAL}}, ease: "none", onUpdate: () => render(st.t)}, 0);
+  render(0);
+  finish();
+  window.__timelines = window.__timelines || {}; window.__timelines["main"] = tl;
+})();
+</script>
+</body></html>

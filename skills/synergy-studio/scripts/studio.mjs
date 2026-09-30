@@ -2,7 +2,7 @@
 // Synergy Studio CLI: make narrated motion-graphics videos with HyperFrames + GSAP + Kokoro.
 // Node >= 20, built-ins only. Run `node studio.mjs help`.
 // A thin dispatcher: every command lives in lib/<command>.mjs and exports USAGE and main(argv).
-// Commands: setup doctor synctest new budget say voice audio words compose stills render check cut transcribe silences scenes beats reference frames
+// Commands: setup doctor synctest new budget say voice audio words compose stills render check cut transcribe silences scenes beats reference frames import look
 import { die, say, H } from "./lib/common.mjs";
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -24,18 +24,22 @@ Modes (project.json "mode"): narrated (voice sets the timing) · footage (your c
   compose <dir>             fill timings into src/index.html → comp/ (+ lint); stills and render run it for you
   stills <dir> [t1 t2 …] [--platform p]  frames → stills/sheet.jpg (+ safe-<platform>.jpg for 9:16): LOOK at them
   render <dir> [--draft]    MP4 → out/<name>-<aspect>.mp4 (+ -share.mp4 if over 25 MB); the old one moves to history/
-  check <dir>               8 automatic checks → out/check.json + stills/final-sheet.jpg
+  check <dir>               automatic checks (format, frame rate, sound, sync, captions) → out/check.json + stills/final-sheet.jpg
  footage, music, reference
+  import <dir> <video> [--aspect 9:16|16:9|1:1|4:5]  footage project from a finished video (default 9:16) → src/footage/ + stills/source-sheet.jpg
   cut <dir>                 project.json "edit.clips" → src/assets/base.mp4 + audio/voice.wav (+ cuts.json)
   transcribe <dir> [file]   words from audio/voice.wav with Whisper (needs internet once), or import a .srt/.vtt/.json → transcript.json
   silences <dir> <clip> [--db -32 --min 0.4]  pauses and speech pieces → silences-<clip>.json
   scenes <dir> <clip> [--threshold 0.3]       shot changes → scenes-<clip>.json
   beats <dir> <song> [--start s]  beat grid (times from --start) → beats.json
   reference <dir> <video> [--every 2]         reference study: contact sheet + cut rhythm → reference/
-  frames <video> [--n 12] [--out file]        contact sheet of any video, no project needed → one JPEG`;
+  frames <video> [--n 12] [--out file]        contact sheet of any video, no project needed → one JPEG
+ style
+  look <dir> --from <images or videos…>       measure a reference → look-reference.json + src/look.css + stills/look-card.jpg
+  look <dir> --card paper|midnight|bold|luxe  the same card for a built in look → stills/look-card-<look>.jpg`;
 
 const COMMANDS = ["setup", "doctor", "new", "budget", "say", "voice", "audio", "words", "compose", "stills", "render", "check",
-                  "cut", "transcribe", "silences", "scenes", "beats", "reference", "frames", "synctest"];
+                  "cut", "transcribe", "silences", "scenes", "beats", "reference", "frames", "synctest", "import", "look"];
 // setup and doctor report their own failures as messages; the other commands are loaded as they stand
 const lib = async (name, argv) => { try { return await (await import(`./lib/${name}.mjs`)).main(argv); } catch (err) { die(err.message); } };
 if (cmd === undefined || cmd === "help" || cmd === "--help" || cmd === "-h") say(HELP);

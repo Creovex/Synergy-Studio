@@ -8,7 +8,10 @@ export const USAGE = "frames <video> [--n 12] [--out file]";
 // video, each taken from the middle of its part) and `reference` (one tile every `every` seconds, starting at 0).
 // Returns { duration, tiles }.
 export function videoSheet(e, video, outFile, { every, n } = {}) {
-  const duration = parseFloat(run(e.ffprobe, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video], { capture: true }).stdout);
+  const probe = run(e.ffprobe, ["-v", "error", "-show_entries", "format=duration:stream=codec_type", "-of", "json", video], { capture: true, soft: true });
+  let info = {}; try { info = JSON.parse(probe.stdout); } catch { /* not a media file */ }
+  const duration = parseFloat(info.format?.duration);
+  if (probe.status !== 0 || !(info.streams || []).some(x => x.codec_type === "video") || !(duration > 0)) die(`${path.basename(video)} is not a video file this tool can read (give an mp4, mov or webm)`);
   const tiles = every ? Math.ceil(duration / every) : n, cols = 4, rows = Math.ceil(tiles / cols);
   fs.mkdirSync(path.dirname(path.resolve(outFile)), { recursive: true });
   if (every) run(e.ffmpeg, ["-loglevel", "error", "-y", "-i", video, "-vf", `fps=1/${every},scale=480:-2,tile=${cols}x${rows}`, "-frames:v", "1", outFile]);

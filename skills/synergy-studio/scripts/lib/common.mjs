@@ -65,3 +65,27 @@ export function parseArgs(rest) {
   for (let i = 0; i < rest.length; i++) { if (rest[i].startsWith("--")) { const k = rest[i].slice(2); flags[k] = rest[i + 1] && !rest[i + 1].startsWith("--") ? rest[++i] : true; } else pos.push(rest[i]); }
   return { flags, pos };
 }
+
+// a file the user names on the command line: relative to the current folder when it exists there, else relative to the project folder
+// (the docs write `src/footage/c1.mp4`); the error says where it looked
+export function needProjectFile(d, f, what) {
+  if (!f || f === true) die(`give the ${what}`);
+  const here = path.resolve(f), inProject = path.resolve(d, f), isFile = p => fs.existsSync(p) && fs.statSync(p).isFile();
+  if (isFile(here)) return here;
+  if (isFile(inProject)) return inProject;
+  die(`${what} not found: ${f} (looked in ${here === inProject ? here : `${here} and ${inProject}`})`);
+}
+
+// whether ffprobe finds a stream of that kind ("a" or "v") in a file; false for a file that is not media at all
+export function hasStream(e, file, kind) {
+  const r = run(e.ffprobe, ["-v", "error", "-select_streams", kind, "-show_entries", "stream=index", "-of", "csv=p=0", file], { capture: true, soft: true });
+  return r.status === 0 && r.stdout.trim() !== "";
+}
+
+// a numeric flag: undefined gives the default; a missing value or a non-number is a plain error
+export function numberFlag(flags, name, dflt, ok, hint) {
+  if (flags[name] === undefined) return dflt;
+  const n = Number(flags[name]);
+  if (flags[name] === true || !Number.isFinite(n) || !ok(n)) die(`--${name} needs ${hint}, got ${flags[name] === true ? "nothing" : `"${flags[name]}"`}`);
+  return n;
+}

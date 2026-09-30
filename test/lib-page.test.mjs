@@ -178,3 +178,84 @@ test("synctest passes a pair within one frame and fails one 3 frames late", asyn
   assert.equal(late.mean_offset_ms, 100);
   assert.equal(judge({ flashes: [2, 4.5], beeps: [2, 4.5, 7] }).pass, false);
 });
+
+// ---- fixes after the independent check
+test("block comments are exempt from the lint like line and html comments", { skip: SKIP }, () => {
+  const dir = project("block-comments");
+  const r = studio("compose", dir);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+for (const [fixture, message] of [["date-spaced", "not allowed: Date.now"], ["gsap-from-spaced", "not allowed: gsap .from("], ["gsap-fromto-spaced", "not allowed: gsap .fromTo("]]) {
+  test(`compose refuses ${fixture} (whitespace around the dot or before the parenthesis)`, { skip: SKIP }, () => {
+    const r = studio("compose", project(fixture));
+    assert.notEqual(r.status, 0);
+    assert.ok(r.stderr.includes(message), r.stderr);
+  });
+}
+
+test("caption_fixes match phrases across words, ignoring case and trailing punctuation", async () => {
+  const { applyCaptionFixes } = await lib("compose.mjs");
+  const words = JSON.parse(fs.readFileSync(path.join(FIXTURES, "transcript-words.json"), "utf8"));
+  const out = applyCaptionFixes(words, { "synergy studio": "Synergy Studio" });
+  assert.deepEqual(out.map((w) => w.text), ["Meet", "Synergy", "Studio,", "the", "body", "running"]);
+  assert.equal(out[1].start, 0.5);
+  assert.equal(out[2].end, 1.4);
+  const spread = applyCaptionFixes(words, { "synergy studio": "SynergyStudio" });
+  assert.deepEqual(spread.map((w) => w.text).slice(1, 3), ["SynergyStudio,", "the"]);
+  assert.equal(spread[1].start, 0.5);
+  assert.equal(spread[1].end, 1.4);
+  const punct = applyCaptionFixes(words, { "studio,": "Studio;" });
+  assert.equal(punct[2].text, "Studio;");
+  assert.equal(applyCaptionFixes(words, { "studio": "Studio" })[2].text, "Studio,");
+  const phrase = applyCaptionFixes([{ text: "Meet synergy studio.", start: 8, end: 9.7 }], { "synergy studio": "Synergy Studio" });
+  assert.deepEqual(phrase.map((w) => w.text), ["Meet", "Synergy", "Studio."]);
+});
+
+test("caption_fixes are applied to words.js by compose", { skip: SKIP }, () => {
+  const dir = project("clean");
+  fs.copyFileSync(path.join(FIXTURES, "transcript-words.json"), path.join(dir, "transcript.json"));
+  const p = JSON.parse(fs.readFileSync(path.join(dir, "project.json"), "utf8"));
+  p.caption_fixes = { "synergy studio": "Synergy Studio" };
+  fs.writeFileSync(path.join(dir, "project.json"), JSON.stringify(p));
+  assert.equal(studio("compose", dir).status, 0);
+  const words = fs.readFileSync(path.join(dir, "comp", "words.js"), "utf8");
+  assert.ok(words.includes('"text":"Synergy"') && words.includes('"text":"Studio,"'), words);
+});
+
+test("pop and box caption styles keep the spacing around the active word", () => {
+  const source = fs.readFileSync(path.join(SCRIPTS, "..", "template", "lib.js"), "utf8");
+  assert.match(source, /display:inline-block;margin:0 \$\{\(0\.03 \* w\.text\.length\)/);
+  assert.match(source, /display:inline-block;line-height:1\.1;border-radius:14px;padding:0 \.12em;margin:0 \.03em/);
+});
+
+test("new refuses a bad platform naming all of them and creates nothing", () => {
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), "studio new test "));
+  made.push(parent);
+  const target = path.join(parent, "p");
+  const r = studio("new", target, "--platform", "foo");
+  assert.notEqual(r.status, 0);
+  for (const name of ["tiktok", "reels", "meta", "shorts", "youtube", "linkedin", "x", "website"]) assert.ok(r.stderr.includes(name), r.stderr);
+  assert.ok(!fs.existsSync(target), "no folder is left behind");
+});
+
+test("stills refuses a time after the end and an unknown platform", { skip: SKIP }, () => {
+  const dir = project("clean");
+  const late = studio("stills", dir, "99");
+  assert.notEqual(late.status, 0);
+  assert.ok(late.stderr.includes("outside the video (0 to 2 s)"), late.stderr);
+  const bad = studio("stills", dir, "1", "--platform", "foo");
+  assert.notEqual(bad.status, 0);
+  assert.ok(bad.stderr.includes('unknown platform "foo"'), bad.stderr);
+});
+
+test("frames gives a plain message for a file that is not a video", { skip: SKIP }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio frames text "));
+  made.push(dir);
+  const file = path.join(dir, "notes.txt");
+  fs.writeFileSync(file, "not a video");
+  const r = spawnSync(process.execPath, ["-e", `import(${JSON.stringify(pathToFileURL(path.join(SCRIPTS, "lib", "frames.mjs")).href)}).then(m => m.main(process.argv.slice(1)))`, file], { encoding: "utf8" });
+  assert.notEqual(r.status, 0);
+  assert.ok(r.stderr.includes("notes.txt is not a video file"), r.stderr);
+  assert.ok(!/ffprobe|Invalid data/i.test(r.stderr), r.stderr);
+});

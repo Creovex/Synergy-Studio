@@ -74,7 +74,7 @@
         const parts = String(w.text).trim().split(/\s+/).filter(Boolean); const tot = parts.reduce((a, p) => a + p.length + 1, 0); let t = w.start;
         parts.forEach(p => { const d = (w.end - w.start) * (p.length + 1) / tot; words.push({text: p, start: t, end: t + d}); t += d; }); });
       if (!words.length) return;
-      const maxW = o.maxWords || 3, maxC = o.maxChars || 22, from = o.from ?? 0, to = o.to ?? TOTAL;
+      const maxW = o.maxWords || 3, maxC = o.maxChars || (style === "color" ? 22 : 18), from = o.from ?? 0, to = o.to ?? TOTAL;
       const box = document.createElement("div"); box.id = "captions"; box.className = "abs";
       const sf = TIMING.safe || [0, 0, 0, 0];                               // keep clear of the app's side buttons
       const L = o.left ?? Math.max(60, sf[2] + 20), R = o.right ?? Math.max(60, sf[3] + 20);
@@ -92,8 +92,8 @@
       groups.forEach((grp, gi) => {
         const el = document.createElement("div"); el.className = "abs"; el.style.cssText = "left:0;right:0;opacity:0";
         const pill = (o.box === false ? "" : `display:inline-block;padding:10px 26px;border-radius:22px;background:${o.boxColor || "rgba(0,0,0,.55)"}`) + (style === "pop" ? ";white-space:nowrap" : "");
-        const wordStyle = style === "pop" ? ' style="display:inline-block;margin:0 .07em"' : style === "box" ? ' style="border-radius:14px;padding:0 .16em;margin:0 -.16em;background-color:rgba(0,0,0,0)"' : "";
-        el.innerHTML = `<span style="${pill}">` + grp.map(w => `<span${wordStyle}>${w.text.replace(/</g, "&lt;")}</span>`).join(" ") + `</span>`; box.appendChild(el);
+        const wordStyle = style === "box" ? ' style="display:inline-block;line-height:1.1;border-radius:14px;padding:0 .12em;margin:0 .03em;background-color:rgba(0,0,0,0)"' : "";
+        el.innerHTML = `<span style="${pill}">` + grp.map(w => `<span${style === "pop" ? ` style="display:inline-block;margin:0 ${(0.03 * w.text.length).toFixed(2)}em"` : wordStyle}>${w.text.replace(/</g, "&lt;")}</span>`).join(" ") + `</span>`; box.appendChild(el);
         const end = gi < groups.length - 1 ? Math.min(groups[gi + 1][0].start, grp[grp.length - 1].end + 0.6) : grp[grp.length - 1].end + 0.6;
         tl.to(el, {opacity: 1, duration: 0.08}, grp[0].start); tl.to(el, {opacity: 0, duration: 0.08}, end - 0.08);
         record.push({start: r3(grp[0].start), end: r3(end), words: grp.map(w => ({text: w.text, start: r3(w.start), end: r3(w.end)}))});
