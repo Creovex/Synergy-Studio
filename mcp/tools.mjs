@@ -3,13 +3,14 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { SKILL_DIR, STUDIO_MJS, UserError, home, paths, projectsRoot, tryEnv, notSetUpText, studioNode, hyperframesEnv, expandHome } from "./context.mjs";
+import { SKILL_DIR, STUDIO_MJS, UserError, home, paths, projectsRoot, tryEnv, notSetUpText, studioNode, hyperframesEnv, expandHome, log } from "./context.mjs";
 import { newJobId, startJob, waitForJob, readJob, logLines, isFinal, jobImages, dropJob, progressText, MAX_WAIT_SEC } from "./jobs.mjs";
 import { existingProject, projectPath, resolveInside, writeProjectFile, listProjectFiles, readProjectFile, addProjectFile, listProjects, latestMp4, exportProject, NAME_RE, checkName } from "./files.mjs";
 import { importHyperframes, planHyperframes, ALLOWED_COMMANDS, JOB_COMMANDS } from "./hyperframes.mjs";
-import { resolvedSkill, guideAppendix, readReference, referenceNames, readSkillFile, skillFileList } from "./content.mjs";
+import { resolvedSkill, guideAppendix, readReference, referenceNames, referenceIndex, readSkillFile, skillFileList } from "./content.mjs";
 import { imageContent } from "./images.mjs";
 import { pathToFileURL } from "node:url";
+import { spawn } from "node:child_process";
 
 const SYNC_WAIT_SEC = 20;
 const RESULT_LIMIT = 12000;
@@ -18,8 +19,8 @@ const LOOKS = ["paper", "midnight", "bold", "luxe"];
 const ASPECTS = ["16:9", "9:16", "1:1", "4:5"];
 const MODES = ["narrated", "footage", "film"];
 const VOICES = ["af_heart", "af_bella", "af_nova", "af_sky", "am_michael", "am_adam", "bf_emma", "bf_isabella", "bm_george", "bm_lewis"];
-const CLI_TOOL = { setup: "studio_setup_start", doctor: "studio_doctor", new: "studio_project_new", import: "studio_project_import", reference: "studio_reference_study", frames: "studio_frames", look: "studio_look_from" };
-const CLI_COMMANDS = new Set(["setup", "doctor", "new", "budget", "say", "voice", "audio", "words", "compose", "stills", "render", "check", "cut", "transcribe", "silences", "scenes", "beats", "reference", "frames", "synctest", "import", "look"]);
+const CLI_TOOL = { brand: "studio_brand_check", setup: "studio_setup_start", doctor: "studio_doctor", new: "studio_project_new", import: "studio_project_import", reference: "studio_reference_study", frames: "studio_frames", look: "studio_look_from" };
+const CLI_COMMANDS = new Set(["setup", "doctor", "new", "budget", "say", "voice", "audio", "words", "compose", "stills", "render", "check", "cut", "transcribe", "silences", "scenes", "beats", "reference", "frames", "synctest", "import", "look", "inspect", "cues", "score", "brand"]);
 
 // ---------------------------------------------------------------- results
 const text = (value, extra = {}) => ({ content: [{ type: "text", text: value }], ...extra });
@@ -85,7 +86,8 @@ async function waitOrJob({ id, label, signal, after, tempFiles = [] }) {
   if (!failed && after) body = `${body}${await after(job)}`;
   if (failed) body = `${body}${job.exit_code === null ? "" : `\n(exit code ${job.exit_code})`}`;
   const content = [{ type: "text", text: body || `${label} finished.` }, ...(await jobImages(job))];
-  dropJob(id);
+  if (failed) log(`job ${id} ${label} failed (exit ${job.exit_code}); its record and log are kept in the jobs folder`);
+  else dropJob(id);
   for (const file of tempFiles) fs.rmSync(file, { force: true });
   return { content, ...(failed ? { isError: true } : {}) };
 }
@@ -144,8 +146,8 @@ define(
 
 define(
   "studio_reference",
-  "Returns one reference file of the skill (craft, design, footage, hyperframes, review and more) as text. Use it when the guide points to a reference or before a step that needs its detail.",
-  { name: { type: "string", description: `The reference name without .md. Available: ${referenceNames().join(", ")}.` } },
+  "Returns one reference file of the skill as text. Use it when the guide points to a reference or before a step that needs its detail. The references: " + referenceIndex().join("; ") + ".",
+  { name: { type: "string", enum: referenceNames(), description: "The reference name without .md (the list is in this tool's description)." } },
   ["name"],
   READ,
   async ({ name }) => text(readReference(name)),
@@ -185,7 +187,7 @@ define(
   async ({ whisper_model }) => {
     const model = whisper_model === undefined ? undefined : userFile(whisper_model, "The Whisper model file");
     // The runtime Node is not installed yet, so setup runs with the Node that runs this server.
-    return studioJob({ label: "setup", args: ["setup", ...flagArgs([["whisper-model", model]])], node: process.execPath });
+    return studioJob({ label: "setup", args: ["setup", ...flagArgs([["whisper-model", model]])], node: studioNode(null) });
   },
   { title: "Set up the tools" },
 );
@@ -391,7 +393,7 @@ define(
 );
 
 for (const [command, description, title] of [
-  ["audio", "Builds the scene timing, music, sound effects and the final mix at -14 LUFS for a project. Use it after the voice (narrated) or after cut and scenes are set (footage, film); run it again after changing events.", "Timing and mix"],
+  ["audio", "Builds the scene timing, music, sound effects and the final mix at -14 LUFS for a project, and warns when the music is less than 6 dB under the voice or an effect is louder than the voice. Use it after the voice (narrated) or after cut and scenes are set (footage, film); run it again after changing events.", "Timing and mix"],
   ["words", "Writes estimated word times of the narration to transcript.json so captions and sound effects can be timed. Use it on a narrated project after audio, then run audio again.", "Estimate word times"],
   ["cut", "Trims, orders, crops and grades the clips listed in project.json edit.clips into src/assets/base.mp4 and cleans the voice. Use it on a footage project before transcribe.", "Cut the clips"],
 ]) {
@@ -500,7 +502,7 @@ define(
 // ---------------------------------------------------------------- jobs
 define(
   "studio_voice",
-  "Speaks every scene's narration with the local Kokoro voice into audio/vo/ and writes durations.json; flags lines that are too fast. Use it after the narration is in project.json. Runs as a job.",
+  "Speaks every scene's narration with the local Kokoro voice into audio/vo/ and writes durations.json, then has Whisper hear every line back. Warns about lines that are too fast, text the voice misreads, long pauses inside a line and words heard differently: fix each warning before going on. Use it after the narration is in project.json. Runs as a job.",
   { name: nameProp, only: { type: "array", items: { type: "string", pattern: "^s\\d+$" }, description: "Scene ids to redo, for example [\"s2\",\"s4\"]. Default: all scenes." } },
   ["name"],
   WRITE_GENERATED,
@@ -526,7 +528,7 @@ define(
 
 define(
   "studio_look_from",
-  "Measures the look of reference images or videos (palette, contrast, grain, cut rhythm) and drafts a custom look for the project, returning a look card image. Or draws the card of a built in look with card. Runs as a job.",
+  "Measures the look of reference images or videos (palette, contrast, grain, cut rhythm) and drafts a custom look for the project, returning a look card image. Use it when the user gives images or a video whose look the new video should match; or draw the card of a built in look with card. Runs as a job.",
   {
     name: nameProp,
     files: { type: "array", items: { type: "string" }, minItems: 1, description: "Full paths of reference images or videos on this computer (the CLI option --from)." },
@@ -551,19 +553,70 @@ define(
     name: nameProp,
     times: { type: "array", items: { type: "number", minimum: 0 }, description: "Seconds to capture, for example [1.5, 4]. Default: the hook frame, each scene's middle and end, and the last half second." },
     platform: { type: "string", enum: PLATFORMS, description: "Safe area guide to draw (default: the project's platform)." },
+    cues: { type: "boolean", description: "Also every cue of project.json \"cues\": 4 frames before, on the cue and 6 frames after (anticipation, hit, reaction), with a legend in stills/cues.txt." },
+    range_from: { type: "number", minimum: 0, description: "With range_to: frames across a whole shot, for example a chase, every `every` seconds." },
+    range_to: { type: "number", minimum: 0, description: "End of the range in seconds." },
+    every: { type: "number", minimum: 0.04, description: "Seconds between range frames (default 0.25)." },
   },
   ["name"],
   WRITE_GENERATED,
-  async ({ name, times, platform }) => {
+  async ({ name, times, platform, cues, range_from, range_to, every }) => {
     const dir = existingProject(name);
+    if ((range_from === undefined) !== (range_to === undefined)) throw new UserError("Give range_from and range_to together (seconds), for example range_from 5 and range_to 12.");
+    if (range_from !== undefined && !(range_to > range_from)) throw new UserError("range_to must be later than range_from.");
+    const range = range_from !== undefined ? [["range", `${range_from}:${range_to}`], ["every", every]] : [];
     return studioJob({
       label: "stills",
-      args: ["stills", dir, ...(times ?? []).map(String), ...flagArgs([["platform", platform]])],
+      args: ["stills", dir, ...(times ?? []).map(String), ...flagArgs([["platform", platform], ["cues", cues === true], ...range])],
       project: dir,
       attach: sheetAttach(dir, ["stills/sheet.jpg"], [["stills", "^safe-[a-z]+\\.jpg$"]]),
     });
   },
   { needsHome: true, title: "Preview stills" },
+);
+
+define(
+  "studio_cues",
+  "Prints the cue sheet of project.json \"cues\" in time order: each cue's time, scene, gap to the previous one and [sync] or [sfx]; flags cues under 3 frames apart. The page reads CUE.<name>. Use it after writing the cues and before blocking the page.",
+  { name: nameProp },
+  ["name"],
+  READ,
+  async ({ name }, ctx) => {
+    const dir = existingProject(name);
+    return studioSync({ label: "cues", args: ["cues", dir], project: dir, signal: ctx.signal });
+  },
+  { needsHome: true, title: "Show the cue sheet" },
+);
+
+define(
+  "studio_score",
+  "Writes src/assets/score.wav from the bundled starter score, a soft bed with a placeholder hit on every cue of project.json \"cues\", and sets \"music\" to it unless the project already plays a song of the user. Use it for a film before blocking the page; replace it with the user's licensed track when there is one. It never runs code from the project.",
+  { name: nameProp },
+  ["name"],
+  WRITE_GENERATED,
+  async ({ name }, ctx) => {
+    const dir = existingProject(name);
+    return studioSync({ label: "score", args: ["score", dir], project: dir, signal: ctx.signal });
+  },
+  { needsHome: true, title: "Write the starter score" },
+);
+
+define(
+  "studio_brand_check",
+  "Measures how much of each still is in the brand colour and says ACCENT (at most 15%), HEAVY or FLOODED (over 35%, the brand colour has become the wallpaper). Use it after studio_stills whenever the user gave brand colours (references/brand-colours.md).",
+  {
+    name: nameProp,
+    brand: { type: "array", minItems: 1, items: { type: "string", pattern: "^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$" }, description: "The brand colours as hex, for example [\"#2A67B7\"]." },
+    files: { type: "array", items: { type: "string" }, description: "Pictures to measure, relative to the project (default: the project's stills/frame-*.png)." },
+  },
+  ["name", "brand"],
+  READ,
+  async ({ name, brand, files }, ctx) => {
+    const dir = existingProject(name);
+    const pics = (files ?? []).map((f) => resolveInside(dir, f));
+    return studioSync({ label: "brand", args: ["brand", dir, ...brand.flatMap((b) => ["--brand", b.startsWith("#") ? b : `#${b}`]), ...pics], project: dir, signal: ctx.signal });
+  },
+  { needsHome: true, title: "Check the brand colour share" },
 );
 
 define(
@@ -641,20 +694,74 @@ define(
 
 // ---------------------------------------------------------------- output
 define(
-  "studio_open",
-  "Gives the absolute path and the file:// link of the project's newest finished MP4, and of its smaller -share.mp4 copy when the render was over 25 MB. Use it at the end to tell the user where the video is, or to find it again.",
-  { name: nameProp },
+  "studio_inspect",
+  "Shows what happens in a stretch of the video as one picture on a time axis: frames, scenes with their words, the voice level with the words Whisper heard, the music level (with the line 6 dB under the voice), each effect with its level, and the level of the finished MP4; warnings are red. The same timeline comes back as text. You cannot hear the video: use this to find the cause when the user says something sounds or looks wrong, or a check line warns, before changing anything. Needs studio_audio (and studio_voice for the words heard).",
+  {
+    name: nameProp,
+    from: { type: "number", minimum: 0, description: "Start of the stretch in seconds (default 0). Look 1 to 2 s around the moment the user names." },
+    to: { type: "number", minimum: 0, description: "End of the stretch in seconds (default the end of the video)." },
+  },
   ["name"],
   READ,
-  async ({ name }) => {
+  async ({ name, from, to }, ctx) => {
+    const dir = existingProject(name);
+    return studioSync({ label: "inspect", args: ["inspect", dir, ...flagArgs([["from", from], ["to", to]])], project: dir, attach: sheetAttach(dir, ["stills/inspect.png"]), signal: ctx.signal });
+  },
+  { title: "See what happens and when" },
+);
+
+// Opens a file with the computer's own apps: the default player, or the file shown in its folder.
+function showFile(file, how) {
+  const mac = process.platform === "darwin", win = process.platform === "win32";
+  const [cmd, args] = how === "finder"
+    ? (mac ? ["open", ["-R", file]] : win ? ["explorer.exe", [`/select,${file}`]] : ["xdg-open", [path.dirname(file)]])
+    : (mac ? ["open", [file]] : win ? ["cmd.exe", ["/c", "start", "", file]] : ["xdg-open", [file]]);
+  const child = spawn(cmd, args, { detached: true, stdio: "ignore", shell: false });
+  child.on("error", (error) => log(`studio_open could not ${how === "finder" ? "show" : "play"} ${file}: ${error.message}`));
+  child.unref();
+}
+
+// Copies the MP4 into a folder the user chose, under a free name (never over an existing file).
+function saveCopy(file, folder) {
+  const dir = path.resolve(expandHome(folder));
+  let stat;
+  try { stat = fs.statSync(dir); } catch { throw new UserError(`The folder ${dir} does not exist. Give the full path of an existing folder, for example ~/Downloads or ~/Desktop.`); }
+  if (!stat.isDirectory()) throw new UserError(`${dir} is not a folder.`);
+  const base = path.basename(file, ".mp4");
+  let dest = path.join(dir, `${base}.mp4`);
+  for (let n = 2; fs.existsSync(dest); n++) dest = path.join(dir, `${base}-${n}.mp4`);
+  fs.copyFileSync(file, dest, fs.constants.COPYFILE_EXCL);
+  return dest;
+}
+
+define(
+  "studio_open",
+  "Delivers the project's newest finished MP4: gives its path and file:// link (and the smaller -share.mp4 copy when the render was over 25 MB) with the final contact sheet as a picture. The chat cannot play a video, so offer the user to play it (show player), show it in Finder (show finder) or save a copy to a folder such as ~/Downloads (save_to). Use it at the end of every video.",
+  {
+    name: nameProp,
+    show: { type: "string", enum: ["player", "finder"], description: "player: open the MP4 in the computer's default video player; finder: show the file in its folder." },
+    save_to: { type: "string", description: "A folder to copy the MP4 into, for example ~/Downloads or ~/Desktop. An existing file there is never overwritten (the copy gets -2, -3 and so on)." },
+  },
+  ["name"],
+  ann(false, false, false, false),
+  async ({ name, show, save_to }) => {
     const dir = existingProject(name);
     const mp4 = latestMp4(dir);
     if (!mp4) throw new UserError(`Project ${name} has no rendered MP4 yet. Run studio_render first.`);
     const share = mp4.file.replace(/\.mp4$/, "-share.mp4");
-    const shareLines = fs.existsSync(share) ? `\nSmaller share copy: ${share}\n${pathToFileURL(share).href}` : "";
-    return text(`Full render: ${mp4.file}\n${pathToFileURL(mp4.file).href}\n${mp4.size} bytes, made ${new Date(mp4.mtimeMs).toISOString()}${shareLines}`);
+    const lines = [`Full render: ${mp4.file}`, pathToFileURL(mp4.file).href, `${mp4.size} bytes, made ${new Date(mp4.mtimeMs).toISOString()}`];
+    if (fs.existsSync(share)) lines.push(`Smaller share copy: ${share}`, pathToFileURL(share).href);
+    if (save_to) lines.push(`Saved a copy: ${saveCopy(mp4.file, save_to)}`);
+    if (show) {
+      showFile(mp4.file, show);
+      lines.push(show === "finder" ? "Shown in Finder (the file is selected)." : "Opened in the default video player.");
+    }
+    const content = [{ type: "text", text: lines.join("\n") }];
+    const sheet = path.join(dir, "stills", "final-sheet.jpg");
+    if (fs.existsSync(sheet)) content.push(...[await imageContent(sheet)].filter(Boolean));
+    return { content };
   },
-  { title: "Where the video is" },
+  { title: "Deliver the video" },
 );
 
 define(

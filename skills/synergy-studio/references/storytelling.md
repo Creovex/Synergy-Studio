@@ -13,9 +13,15 @@ doesn't serve that sentence, cut it.
 | Story | hook, before, turning point, after, CTA | brands, founders (Haura intro reel) |
 | Sale / offer | hook (product), desire (products), offer, how to buy | promotions (Haura 5% sale ad) |
 | Wordless short | setup, try and fail, low point, turn, flourish, echo of the opening | stories, mascots, films (Claude × Syn) |
+| Mascot chase | calm, threat arrives, chase, three tries, the brand is the escape, relief, gag payoff, button | mascots, brand shorts (AllSpace "The Chase") |
 | Visual journey | a chain of images linked by match cuts or zooms through objects | music pieces, "the world inside" ideas |
 | Mood piece | one feeling built and released with music, no plot | art, brand films, loops |
 Stories and films don't need a hook line, a CTA or narration: see cinema.md §6 and character.md.
+
+**The hero wants something, and something blocks it.** A mascot story with no want and no threat becomes a
+montage (an early AllSpace cut was a rush of doors, and the brand owner asked for "a story"). Make the audience's
+pain a physical villain (an agent's chaos became a paperwork tornado). The brand is how the hero wins: put it
+inside the story as the payoff (the door with the logo, the words falling on its head), never only on an end card.
 
 ## Hooks (first 2 seconds, on screen AND spoken)
 A question the viewer feels ("Tired by 3 p.m.?"), a surprising fact with a source, a bold promise

@@ -6,41 +6,38 @@ import { createRequire } from "node:module";
 import { H, die, say, run, env, hf, readJSON, copy, projDir, parseArgs } from "./common.mjs";
 import { compose } from "./compose.mjs";
 import { withHeavyLock } from "./lock.mjs";
+import { LUFS_TARGET, LUFS_TOLERANCE, masterGain, masterChain, measureFile } from "./master.mjs";
 
 export const USAGE = "render <dir> [--draft]";
 
 // ---------------------------------------------------------------- render
-const LUFS_TARGET = -14, LUFS_TOLERANCE = 0.4, TP_LIMIT = -1.5;    // the final MP4 must land at -14 ± 0.5 LUFS with a true peak of at most -1.5 dBTP
-
-// measure integrated loudness and true peak of a file's audio with ffmpeg's ebur128
-function measure(e, file) {
-  const lo = run(e.ffmpeg, ["-hide_banner", "-nostats", "-i", file, "-vn", "-af", "ebur128=peak=true", "-f", "null", "-"], { capture: true, soft: true }).stderr;
-  const I = +(lo.match(/I:\s+(-?[\d.]+) LUFS/g) || []).pop()?.match(/-?[\d.]+/)[0], TP = +(lo.match(/Peak:\s+(-?[\d.]+) dBFS/g) || []).pop()?.match(/-?[\d.]+/)[0];
-  return { I, TP };
-}
+const TP_LIMIT = -1.5;                     // the final MP4 must land at -14 ± 0.3 LUFS with a true peak of at most -1.5 dBTP
+const RENDER_LIMIT = 0.70;                 // linear, about -3.1 dBFS: AAC overshoot then stays under -1 dBTP
 
 // The final sound comes from the lossless mix when there is one (not the AAC track the renderer muxed, so there is no second
-// lossy pass; the owner's fix of 2026-09-30), trimmed to the timeline. Pass one measures it with loudnorm; pass two applies that
-// measurement linearly, then a limiter at 4x oversampling holds sharp transients (claps, clicks) so the AAC stays under the peak
-// limit; the finished file is measured again and, if it is outside the target, the peak ceiling is lowered by the overshoot and
-// the encode is repeated (at most three encodes). Video is copied untouched.
-const LIMIT = "aresample=192000,alimiter=limit=0.70:attack=1:release=50:level=false,aresample=48000";
+// lossy pass; the owner's fix of 2026-09-30), trimmed to the timeline. The gain is searched with the 4x oversampled limiter in
+// the measured chain (master.mjs), so a peaky score lands on -14 LUFS instead of under it. The finished file is measured again
+// (AAC shifts the level a little); if it is outside the target the gain is corrected by the miss, or the limit is lowered when the
+// peak is too high, and the encode is repeated (at most three encodes). Video is copied untouched.
 export function normaliseLoudness(e, raw, fin, mix = null, total = null) {
   const src = mix && fs.existsSync(mix) ? mix : raw, audioIn = src === raw ? [] : ["-i", src], map = src === raw ? [] : ["-map", "0:v:0", "-map", "1:a:0"];
   // trimmed first in the filter chain: loudnorm shifts timestamps, so a trim after it (or an output -t) ends the sound about 0.07 s early
   const trim = Number.isFinite(total) && total > 0 ? `apad,atrim=end=${total},` : "";
-  const m = run(e.ffmpeg, ["-hide_banner", "-nostats", "-i", src, "-vn", "-af", `${trim}loudnorm=I=${LUFS_TARGET}:TP=${TP_LIMIT}:LRA=11:print_format=json`, "-f", "null", "-"], { capture: true, soft: true }).stderr;
-  const j = (() => { try { return JSON.parse(m.slice(m.lastIndexOf("{"), m.lastIndexOf("}") + 1)); } catch { return null; } })();
-  if (!j || !Number.isFinite(+j.input_i)) die("could not measure the loudness of the render (ffmpeg loudnorm gave no numbers)");
-  let ceiling = TP_LIMIT, last = null;
+  let limit = RENDER_LIMIT, m = masterGain(e, src, limit, { trim, log: say });
+  if (m.silent) {                                            // a silent mix is kept silent: no gain, still an audio track
+    run(e.ffmpeg, ["-loglevel", "error", "-y", "-i", raw, ...audioIn, ...map, "-c:v", "copy", "-af", masterChain(0, limit, trim), "-ar", "48000", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", fin]);
+    return { I: null, TP: null, silent: true };
+  }
+  if (!m.reachable) die(`the final mix is too peaky to master (it only reaches ${m.I} LUFS after the limiter): run studio audio again, with a less peaky track, softer hits or a lower "gain_db"`);
+  let gain = m.gain, last = null;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const af = `loudnorm=I=${LUFS_TARGET}:TP=${ceiling}:LRA=11:measured_I=${j.input_i}:measured_TP=${j.input_tp}:measured_LRA=${j.input_lra}:measured_thresh=${j.input_thresh}:offset=${j.target_offset}:linear=true`;
-    run(e.ffmpeg, ["-loglevel", "error", "-y", "-i", raw, ...audioIn, ...map, "-c:v", "copy", "-af", `${trim}${af},${LIMIT}`, "-ar", "48000", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", fin]);
-    last = measure(e, fin);
-    const over = last.TP - TP_LIMIT;
-    if (Math.abs(last.I - LUFS_TARGET) <= LUFS_TOLERANCE && over <= 0) break;
-    if (over > 0) ceiling = +(ceiling - over - 0.1).toFixed(2);
-    else ceiling = Math.min(ceiling, TP_LIMIT);
+    run(e.ffmpeg, ["-loglevel", "error", "-y", "-i", raw, ...audioIn, ...map, "-c:v", "copy", "-af", masterChain(gain, limit, trim), "-ar", "48000", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", fin]);
+    last = measureFile(e, fin);
+    if (last.I === null || last.TP === null) die("could not measure the loudness of the finished file");
+    const over = last.TP - TP_LIMIT, miss = last.I - LUFS_TARGET;
+    if (Math.abs(miss) <= LUFS_TOLERANCE && over <= 0) break;
+    if (over > 0) { limit = +(limit * 10 ** (-(over + 0.1) / 20)).toFixed(4); m = masterGain(e, src, limit, { trim }); gain = m.gain; }   // lower the ceiling, search the gain again
+    else gain -= miss;
   }
   return last;
 }
@@ -70,6 +67,7 @@ export async function readCaptions(e, compDir, timeoutMs = 30000) {
 
 async function renderLocked(dir, draft) {
   const e = env(), d = projDir(dir), proj = readJSON(path.join(d, "project.json"));
+  if (!fs.existsSync(path.join(d, "audio", "mix.wav"))) die(`audio/mix.wav is missing: run studio audio ${dir} first (it builds the sound; a failed run removes the old one)`);
   compose(dir);
   const out = path.join(d, "out"); fs.mkdirSync(out, { recursive: true });
   const prev = fs.readdirSync(out).filter(f => f.endsWith(".mp4") || f.startsWith("source-") || f === "check.json" || f === "captions.json");
@@ -88,10 +86,12 @@ async function renderLocked(dir, draft) {
   if (draft) args.push("--quality", "draft");
   let r = hf(e, args, { soft: true });
   if (r.status !== 0) { say("render failed once; retrying (the first browser start can time out)"); hf(e, args); }
-  // final sound from the lossless mix, normalised and limited (two passes), video untouched
+  // final sound from the lossless mix: gain searched through the limiter and measured, video untouched
   const tf = path.join(d, "timing.json"), total = fs.existsSync(tf) ? +readJSON(tf).TOTAL : null;
   const lu = normaliseLoudness(e, raw, fin, path.join(d, "comp", "audio", "mix.wav"), total);
-  say(`final loudness ${lu.I} LUFS, true peak ${lu.TP} dBTP`);
+  if (lu.silent) say("  ! the final sound is silent: the video has an audio track with no sound in it.");
+  else say(`final loudness ${lu.I} LUFS, true peak ${lu.TP} dBTP`);
+  if (!lu.silent && (!(Math.abs(lu.I - LUFS_TARGET) <= LUFS_TOLERANCE) || !(lu.TP <= TP_LIMIT))) say(`  ! the final sound is outside ${LUFS_TARGET} ± ${LUFS_TOLERANCE} LUFS with a true peak of at most ${TP_LIMIT} dBTP after three encodes`);
   fs.rmSync(raw, { force: true });
   copy(path.join(d, "project.json"), path.join(out, "source-project.json")); copy(path.join(d, "src", "index.html"), path.join(out, "source-index.html"));
   say(`rendered ${fin}`);

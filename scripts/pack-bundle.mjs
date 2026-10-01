@@ -75,8 +75,11 @@ try {
   const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, "bundle", "manifest.json"), "utf8"));
   const { TOOLS } = await import(path.join(ROOT, "mcp", "tools.mjs"));
   manifest.tools = TOOLS.map((t) => ({ name: t.name, description: t.description }));
+  // Claude Desktop refuses prompts/get for any prompt the manifest does not declare
+  const { PROMPTS, PROMPT_TEXT } = await import(path.join(ROOT, "mcp", "content.mjs"));
+  manifest.prompts = PROMPTS.map((p) => ({ name: p.name, description: p.description, arguments: p.arguments.map((a) => a.name), text: PROMPT_TEXT[p.name] }));
   fs.writeFileSync(path.join(staging, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(`staged ${staging}: manifest.json, mcp/, skills/ (${manifest.tools.length} tools listed)`);
+  console.log(`staged ${staging}: manifest.json, mcp/, skills/ (${manifest.tools.length} tools, ${manifest.prompts.length} prompts listed)`);
 
   run("mcpb validate manifest.json", process.execPath, [MCPB, "validate", path.join(staging, "manifest.json")]);
   fs.mkdirSync(path.dirname(OUT), { recursive: true });

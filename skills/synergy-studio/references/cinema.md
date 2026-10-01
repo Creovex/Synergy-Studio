@@ -62,8 +62,25 @@ feedback). A zoom through an eye into a memory is the idea itself.
 Take the score's tempo or `studio_beats`. Cut and hit on beats (one beat = 60 / BPM s). Let the quiet acts
 breathe: 4–6 s shots with slow moves. Speed up in the montage: 1.5–3 s shots.
 
+**Energy plan.** Rate every beat's energy from 1 to 5 in shots.md. Neighbouring beats differ by at least 2
+(a calm stroll, then the rumble; the chase, then the quiet room). Put a hold or a silence before each big hit.
+When the world changes, change the frame too: letterbox bars that slide away, a colour shift, a camera that
+locks off.
+
 ## 6. Wordless storytelling
 A wordless short still needs a clear arc. For example: **setup** (who, where, what they want) → **try and
 fail** → **low point** (alone, scared) → **turn** (someone or something arrives) → **flourish** (they
 make something together) → **echo** (a callback to the opening image, changed). Each act needs one
 readable image and one clear emotion on the character's face (character.md).
+
+## 7. Staging for readability (the three bugs found in one chase film were all staging)
+- **In a chase, hero and chaser share the frame.** Put the runner at one third, facing the open side; the
+  camera leads by at most a third of the frame, and at least half of the chaser stays inside the edge. Check
+  the start, middle and end of every chase shot (`studio_stills` with `range_from` and `range_to`).
+- **Silhouettes.** Each beat reads as one black-filled shape in one still.
+- **Faces are sacred.** No prop, word or effect covers an eye or the mouth in a close-up. Hold keys, cards and
+  tools beside the face, below the eyes.
+- **Chaos gets a cover.** A burst or explosion shows at most 4 frames of jumble; hide it under a poof cloud or
+  a flash, then release the pieces one at a time, 0.1–0.2 s apart.
+- **One focal point at every impact.** At the frame of a hit, only the hit moves. The contact frame lands on its
+  cue (`CUE.x`), with the anticipation 3–6 frames before; `studio_stills` with `cues: true` shows all three.

@@ -1,8 +1,8 @@
 """Scene timing + the finished soundtrack (narration, music bed with ducking, UI sounds).
 
 Run through the CLI:  node scripts/studio.mjs audio <project>
-Reads  project.json (scenes, events, music, lead/pre/post/tail) and durations.json
-Writes timing.json + timing.js (window.TIMING = {T, EV, TOTAL}) and audio/mix_raw.wav;
+Reads  project.json (scenes, events, cues, music, lead/pre/post/tail) and durations.json
+Writes timing.json + timing.js (window.TIMING = {T, EV, CUE, SYNC, TOTAL}) and audio/mix_raw.wav;
 the CLI then loudness-normalises it to audio/mix.wav (-14 LUFS, -1.5 dBTP).
 
 Two modes (project.json "mode"):
@@ -83,9 +83,32 @@ for sid, evs in (cfg.get("events") or {}).items():
         if isinstance(v, dict) and v.get("sfx"):
             SFX.append((T[sid]["vo"] + off, v["sfx"]))
 
+# cues: one cue sheet for the page (CUE.name), the score (reads project.json) and the checks.
+# {"slam": 21.4, "bang": {"t": 30.6, "sync": true, "sfx": "pop"}}; absolute seconds of the finished video.
+# "sync": true makes studio check confirm that the sound starts on that frame; "sfx" adds a built in effect at the cue.
+CUE, SYNC = {}, []
+_cues = cfg.get("cues") or {}
+if not isinstance(_cues, dict):
+    sys.exit('ERROR: "cues" in project.json must be an object, for example {"slam": 21.4, "bang": {"t": 30.6, "sync": true}}.')
+CUE_SFX = ("pop", "click", "whoosh")                              # the built in effects a cue may name
+for name, v in _cues.items():
+    raw = v.get("t") if isinstance(v, dict) else v
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        sys.exit(f'ERROR: cue "{name}" needs a time in seconds: "{name}": 21.4 or "{name}": {{"t": 21.4, "sync": true}}.')
+    t0 = float(raw)
+    if not 0 <= t0 <= TOTAL:
+        sys.exit(f'ERROR: cue "{name}" at {t0} s is outside the video (0 to {TOTAL} s). Move it in project.json "cues".')
+    if isinstance(v, dict) and v.get("sync") is not None and not isinstance(v["sync"], bool):
+        sys.exit(f'ERROR: cue "{name}": "sync" must be true or false, not {json.dumps(v["sync"])}. Fix it in project.json "cues".')
+    if isinstance(v, dict) and v.get("sfx") not in (None, "") and v["sfx"] not in CUE_SFX:
+        sys.exit(f'ERROR: cue "{name}": unknown sfx {json.dumps(v["sfx"])}. Use one of {", ".join(CUE_SFX)} (or leave "sfx" out).')
+    CUE[name] = t0
+    if isinstance(v, dict) and v.get("sync"): SYNC.append(name)
+    if isinstance(v, dict) and v.get("sfx"): SFX.append((t0, v["sfx"]))
+
 SAFE = {"tiktok": [200, 400, 60, 180], "reels": [269, 672, 65, 65], "meta": [269, 672, 65, 65], "shorts": [288, 672, 60, 201]}
 plat = str(cfg.get("platform", "")).lower()
-timing = {"T": T, "EV": EV, "TOTAL": TOTAL, "fps": cfg.get("fps", 30), "aspect": cfg.get("aspect", "16:9"),
+timing = {"T": T, "EV": EV, "CUE": CUE, "SYNC": SYNC, "TOTAL": TOTAL, "fps": cfg.get("fps", 30), "aspect": cfg.get("aspect", "16:9"),
           "platform": plat, "safe": SAFE.get(plat) if cfg.get("aspect") == "9:16" else None}
 (proj / "timing.json").write_text(json.dumps(timing, indent=1))
 (proj / "timing.js").write_text("window.TIMING = " + json.dumps(timing) + ";\n")
@@ -154,7 +177,7 @@ def whoosh(t0, amp=0.18):
     if i < 0 or i + L >= n: return
     ts = np.arange(L) / SR; noise = np.convolve(rng.standard_normal(L), np.ones(40) / 40, "same")
     fx[i:i + L] += amp * np.sin(np.pi * ts / 0.7) ** 2 * noise
-def pop(t0, amp=0.3):
+def pop(t0, amp=0.2):                                               # 0.3 sat 4.8 dB over the voice (speech.balance)
     i = int(t0 * SR); L = int(0.12 * SR)
     if i + L >= n: return
     ts = np.arange(L) / SR; f = 520 * np.exp(-ts * 8)
@@ -167,6 +190,20 @@ if cfg.get("transition_whoosh", True):
 
 mix = vo + 0.9 * music + fx
 (proj / "audio").mkdir(parents=True, exist_ok=True)
+# balance of the layers (speech.py): music under the voice, and every effect against the voice
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+from speech import balance, MUSIC_UNDER_DB, EFFECT_OVER_DB
+fx_events = [(t0, kind) for t0, kind in SFX] + ([(T[sc["id"]]["start"], "whoosh (scene change)") for sc in scenes[1:]] if cfg.get("transition_whoosh", True) else [])
+bal = balance(vo, 0.9 * music, fx, SR, fx_events)
+if bal["music_under_db"] is not None and not bal["music_ok"]:
+    print(f"WARNING: the music is only {bal['music_under_db']:.1f} dB under the voice while it speaks (keep it {MUSIC_UNDER_DB:.0f} dB or more under):"
+          + (' lower "gain_db" of the song' if isinstance(mood, dict) else ' choose a calmer mood or "music": "none"'))
+for ev in bal["effects"]:
+    if not ev["ok"]:
+        print(f"WARNING: the {ev['name']} at {ev['at']:.2f} s is {ev['over_voice_db']:.1f} dB louder than the voice's usual level (keep effects at most {EFFECT_OVER_DB:.0f} dB above it): move it off the words or drop it")
+(proj / "audio" / "mix-report.json").write_text(json.dumps(bal, indent=1))
+from speech import layer_levels                                     # what studio inspect draws: each layer's level over time
+(proj / "audio" / "layers.json").write_text(json.dumps({**layer_levels(vo, 0.9 * music, fx, SR), "events": [{"at": round(t, 2), "name": k} for t, k in fx_events]}))
 sf.write(proj / "audio" / "mix_raw.wav", np.stack([mix, mix], 1), SR)
 for s_, v in T.items():
     if MODE == "narrated": print(f"  {s_}: {v['start']:6.2f}–{v['end']:6.2f} s  (narration {v['vo']:.2f}–{v['vo_end']:.2f}; event t counts from {v['vo']:.2f})")

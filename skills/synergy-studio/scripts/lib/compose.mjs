@@ -13,7 +13,7 @@ export const LINT = [[/Math\s*\.\s*random/, "Math.random (use fixed values)"], [
   [/url\(\s*["']?https?:/, "network URL in url( (put files in src/assets)"], [/import\s.*["']https?:/, "network URL in an import (put files in src/assets)"]];
 // every top level field project.json may have (LITE.md section 6)
 export const PROJECT_FIELDS = ["name", "kind", "mode", "aspect", "platform", "length", "fps", "voice", "speed", "music", "lead", "pre", "post", "tail",
-  "lexicon", "scenes", "events", "edit", "caption_fixes", "voice_track", "transition_whoosh"];
+  "lexicon", "scenes", "events", "cues", "edit", "caption_fixes", "voice_track", "transition_whoosh"];
 // caption_fixes: a key is one or more words ("synergy studio"). Entries are first split into single words (the way captions() splits
 // them, so nothing moves); then each key is matched against consecutive words, case insensitive. A key word without trailing punctuation
 // ignores the punctuation on the transcript word (kept after the replacement); a key word with punctuation must match it exactly.
@@ -46,6 +46,38 @@ export function applyCaptionFixes(entries, fixes) {
   }
   return words.map(w => ({ text: w.text, start: w.start, end: w.end }));
 }
+// ---- the cue sheet in the page (project.json "cues", read in the page as CUE.<name>)
+// the script text of a page without comments
+export function pageScript(html) {
+  return (String(html).match(/<script\b[^>]*>[\s\S]*?<\/script>/g) || []).join("\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:\\])\/\/[^\n]*/g, "$1");
+}
+// names the page reads as CUE.name or CUE["name"] that the cue sheet does not have (a misspelt name throws in the browser)
+export function unknownCues(html, cues) {
+  const known = new Set(Object.keys(cues || {})), script = pageScript(html), seen = [];
+  for (const m of script.matchAll(/(?<![\w$.])CUE\s*(?:\.\s*([A-Za-z_$][\w$]*)|\[\s*["']([^"']+)["']\s*\])/g)) {
+    const name = m[1] || m[2]; if (!known.has(name) && name !== "toJSON" && !seen.includes(name)) seen.push(name);
+  }
+  return seen;
+}
+// the cue sheet of project.json against the one studio audio put in timing.json: what differs, one line each (empty when they agree)
+export function staleCues(proj, timing) {
+  const want = proj.cues && typeof proj.cues === "object" && !Array.isArray(proj.cues) ? proj.cues : {}, have = timing.CUE || {}, haveSync = new Set(timing.SYNC || []);
+  const time = v => (v !== null && typeof v === "object" ? v.t : v), out = [];
+  for (const [n, v] of Object.entries(want)) {
+    if (!(n in have)) out.push(`cue ${n} is new`);
+    else if (typeof time(v) === "number" && time(v) !== have[n]) out.push(`cue ${n} is ${time(v)} s in project.json but ${have[n]} s in timing.json`);
+    else if ((v && typeof v === "object" && v.sync === true) !== haveSync.has(n)) out.push(`cue ${n}: "sync" changed`);
+  }
+  for (const n of Object.keys(have)) if (!(n in want)) out.push(`cue ${n} was removed`);
+  return out;
+}
+// cues whose time is typed as a number in the page: they drift when the cue sheet changes ("name (time)")
+export function typedCueTimes(html, cues) {
+  const entries = Object.entries(cues || {}); if (!entries.length) return [];
+  const nums = (pageScript(html).match(/(?<![\w.])\d+\.\d+(?![\w.])/g) || []).map(Number);
+  return entries.filter(([, t]) => nums.some(x => x === t)).map(([n, t]) => `${n} (${t})`);
+}
+
 export function compose(dir) {
   const e = env(), d = projDir(dir), proj = readJSON(path.join(d, "project.json"));
   const tf = path.join(d, "timing.json"); if (!fs.existsSync(tf)) die("run `studio audio` first (timing.json missing)");
@@ -62,7 +94,13 @@ export function compose(dir) {
   const left = html.match(/\{\{[^}]*\}\}/g); if (left) errors.push("unfilled placeholders: " + [...new Set(left)].join(" "));
   const ids = [...html.matchAll(/<(\w+)[^>]*\bdata-start=[^>]*>/g)].map(m => (m[0].match(/\bid="([^"]+)"/) || [])[1]);
   if (ids.some(x => !x)) errors.push("every element with data-start needs a unique id (else video freezes and audio is silent)");
+  const stale = staleCues(proj, timing);
+  if (stale.length) die(`the cue sheet changed since studio audio: run it again (${stale.join("; ")})`);
+  const cueNames = Object.keys(timing.CUE || {});
+  for (const n of unknownCues(html, timing.CUE)) errors.push(`CUE.${n}: no cue called "${n}" in project.json "cues" (${cueNames.length ? "cues: " + cueNames.join(", ") : "there are no cues yet"}); add it, then run studio audio`);
   if (errors.length) { errors.forEach(x => console.error("  ✗ " + x)); die("compose stopped: fix src/index.html"); }
+  const hard = typedCueTimes(html, timing.CUE);             // hard coded cue times drift when the cue sheet changes
+  if (hard.length) say(`  ! cue times typed as numbers in the page: ${hard.join(", ")}. Use CUE.<name> so picture and sound move together.`);
   // HyperFrames looks for @font-face rules in the page itself and downloads a font from Google Fonts for a family it does not find
   // there (looks.css is a linked file it does not read), so the bundled font rules are also written into the page: no network at render time
   const faces = (fs.readFileSync(path.join(SKILL, "template", "looks.css"), "utf8").match(/@font-face\s*\{[^}]*\}/g) || []).join("\n");

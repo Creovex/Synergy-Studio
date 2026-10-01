@@ -90,7 +90,7 @@ def test_timing_carries_platform_and_safe_area(tmp_path):
     run_audio(proj)
     t = timing(proj)
     assert (t["fps"], t["aspect"], t["platform"], t["safe"]) == (24, "9:16", "tiktok", [200, 400, 60, 180])
-    assert set(t) == {"T", "EV", "TOTAL", "fps", "aspect", "platform", "safe"}
+    assert set(t) == {"T", "EV", "CUE", "SYNC", "TOTAL", "fps", "aspect", "platform", "safe"}
 
 
 # ---------------------------------------------------------------- footage and film

@@ -16,6 +16,9 @@
     const V = (s, o) => { if (!T[s]) throw new Error("unknown scene " + s); return T[s].vo + (o || 0); };
     // S(scene, offset): absolute time from the scene's start (before the narration)
     const S = (s, o) => T[s].start + (o || 0);
+    // CUE.name: absolute seconds from project.json "cues" (one cue sheet for the page, the score and the checks);
+    // a misspelt cue name throws instead of silently giving undefined
+    const CUE = new Proxy(TIMING.CUE || {}, {get: (o, k) => { if (typeof k !== "string" || k === "toJSON" || Object.prototype.hasOwnProperty.call(o, k)) return o[k]; throw new Error("unknown cue " + k + " (add it to project.json cues, then studio audio)"); }});
     const at = (s, name) => { const e = (EV[s] || {})[name]; if (e === undefined) throw new Error("unknown event " + s + "." + name); return V(s, e); };
 
     // By default scenes fade in at their start and out at their end (the last one stays). The first scene is
@@ -105,7 +108,7 @@
           if (off !== null) { tl.to(sp, {color: o.color || "#fff", duration: 0.05}, off); if (style === "pop") tl.to(sp, {scale: 1, duration: 0.08}, off); } });
       });
     };
-    return {tl, T, EV, TOTAL, V, S, at, E, rise, fadeIn, fadeOut, pop, press, pick, count, drawIn, stagger, kenburns, punch, captions, finish};
+    return {tl, T, EV, CUE, TOTAL, V, S, at, E, rise, fadeIn, fadeOut, pop, press, pick, count, drawIn, stagger, kenburns, punch, captions, finish};
   };
   window.SS = SS;
 })();

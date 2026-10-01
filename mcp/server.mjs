@@ -12,6 +12,7 @@ import {
   tryEnv,
   notSetUpText,
   log,
+  setLogClient,
 } from "./context.mjs";
 import { TOOLS } from "./tools.mjs";
 import { validateArguments } from "./schema.mjs";
@@ -44,6 +45,7 @@ const isObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v)
 function initialize(params) {
   if (!isObject(params) || typeof params.protocolVersion !== "string") throw rpcError("initialize needs params with a protocolVersion (text).", -32602);
   const info = isObject(params.clientInfo) ? `${params.clientInfo.name ?? "unknown"} ${params.clientInfo.version ?? ""}`.trim() : "unknown client";
+  setLogClient(isObject(params.clientInfo) ? params.clientInfo.name : "unknown");
   log(`client ${info} requested protocol version ${params.protocolVersion}`);
   const version = SUPPORTED_PROTOCOLS.includes(params.protocolVersion) ? params.protocolVersion : SUPPORTED_PROTOCOLS[0];
   if (version !== params.protocolVersion) log(`protocol version ${params.protocolVersion} is not supported; answering ${version}`);
@@ -63,13 +65,19 @@ async function callTool(params, signal) {
   const args = params.arguments ?? {};
   const problem = validateArguments(args, inputSchema(tool));
   if (problem) return { content: [{ type: "text", text: `${problem} Call ${tool.name} again with corrected inputs.` }], isError: true };
+  const started = Date.now();
+  const done = (result) => {
+    const first = result?.isError ? ` : ${String(result.content?.[0]?.text ?? "").split("\n").find((l) => l.trim()) ?? ""}`.slice(0, 300) : "";
+    log(`call ${tool.name} ${result?.isError ? "ERROR" : "ok"} ${Date.now() - started} ms${first}`);
+    return result;
+  };
   try {
-    if (tool.needsHome && !tryEnv()) return { content: [{ type: "text", text: notSetUpText() }], isError: true };
-    return await tool.handler(args, { signal });
+    if (tool.needsHome && !tryEnv()) return done({ content: [{ type: "text", text: notSetUpText() }], isError: true });
+    return done(await tool.handler(args, { signal }));
   } catch (error) {
-    if (error instanceof UserError) return { content: [{ type: "text", text: error.message }], isError: true };
+    if (error instanceof UserError) return done({ content: [{ type: "text", text: error.message }], isError: true });
     log(`tool ${tool.name} failed:`, error.stack ?? error.message);
-    return { content: [{ type: "text", text: `Unexpected error in ${tool.name}: ${error.message}` }], isError: true };
+    return done({ content: [{ type: "text", text: `Unexpected error in ${tool.name}: ${error.message}` }], isError: true });
   }
 }
 
@@ -185,4 +193,4 @@ process.stdin.on("data", (chunk) => {
 });
 process.stdin.on("end", shutdown);
 
-log(`${SERVER_NAME} started on node ${process.version}; ${tools.length} tools; tool home ${home()}; projects ${projectsRoot()}`);
+log(`${SERVER_NAME} started on node ${process.version}${process.versions.electron ? ` inside Electron ${process.versions.electron} (${process.execPath})` : ""}; ${tools.length} tools; tool home ${home()}; projects ${projectsRoot()}`);

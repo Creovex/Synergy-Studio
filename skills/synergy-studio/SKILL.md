@@ -61,6 +61,9 @@ For a returning brand, read its earlier `brief.md` and `feedback.md` first ("Car
 sound, voice and words, each with what it must not become ("luxury and fun", not "luxury and boring"), plus
 one signature move. Unless the user asks for a series look, this video must not look or sound like the
 template or the last videos made here: change at least three channels.
+**Brand colours** (references/brand-colours.md): when the user gives colours or a logo, give each colour a role and
+keep the signature hue for the logo and the hero, with a warm or neutral world around it. A brand colour is an
+accent, not the whole look.
 
 ## 2. Find the idea (references/creative.md, craft.md, storytelling.md, cinema.md)
 Find the insight, sketch **three genuinely different concepts**, pick the strongest (or let the user pick
@@ -69,8 +72,12 @@ when it matters), and give it a spine: a visual metaphor, a motif, a hero moment
 short ad, a few lines per shot instead of the full table is fine). Plan the **shot size and camera move**
 of each shot too (cinema.md §2–4): wide, close and extreme close; push-ins, pull-backs, cuts through an object.
 Show the user a short summary (concept, message, structure with timings, look, voice, CTA) and ask
-"a) Build it  b) Show me stills first  c) Change something". For a quick 15-second clip or a small edit,
-a two-line plan is enough.
+"a) Build it  b) Show me stills first  c) Change something".
+**Pitch cheap for stories, films, mascot pieces and a brand's first video.** Show the three concepts as beat
+sheets (6–10 one-line beats, one "poster frame" line, the want, the villain and the payoff). After the pick,
+send 6–12 rough stills with their times (an animatic) and build only after a yes. After a rejection, stills
+first is the default. A full build is the most expensive way to learn the idea was wrong. For a quick 15-second
+clip or a small edit, a two-line plan is enough.
 
 ## 3. Build
 Narrated video (the kind of the AllSpace reels, LSPedia, the Synergy Studio explainer):
@@ -83,7 +90,11 @@ Narrated video (the kind of the AllSpace reels, LSPedia, the Synergy Studio expl
    `studio_audio` prints the real split and warns when over `length`. Brand names: `studio_say` with `text: "HAURA"`
    makes a sample (`audio/say.wav`; it returns the absolute path, give that path to the user to play) so they can listen; fix the sound with
    `lexicon` (keep `say` in normal spelling, because captions are made from it).
-2. `studio_voice` (a job; flags lines over 3.5 words/s: cut words; `only: ["s3"]` redoes one scene) →
+2. `studio_voice` (a job; flags lines over 3.5 words/s: cut words; `only: ["s3"]` redoes one scene). It says
+   abbreviations the voice misreads in their spoken form (2 a.m. as 2 AM, e.g. as for example, & as and, 20% as 20 percent), warns about
+   text it cannot fix (web addresses, amounts, symbols), finds pauses over 0.75 s inside a line, and has Whisper hear
+   every line back: fix every WARNING it prints (reword, `lexicon`, or split the line) and run it again. You cannot
+   hear the voice; these warnings are your ears →
    `studio_audio` (timing + mix).
    **Then time the moments (second pass):** `studio_words` writes estimated word times to
    `transcript.json`; add `events` (`{"s2": {"tick": {"t": 1.4, "sfx": "pop"}}}` where `t` is seconds after
@@ -102,7 +113,7 @@ Narrated video (the kind of the AllSpace reels, LSPedia, the Synergy Studio expl
    low-contrast text. Then **look at the sheet** (`stills/sheet.jpg`, all frames in time order) **and the safe
    area guide** (`stills/safe-<platform>.jpg`, red = covered by the app), which the job returns as images. Fix and
    repeat until every frame is right; each run replaces the old stills.
-5. `studio_render` (a job) → `studio_check` (a job; all PASS) → **look at the final sheet**
+5. `studio_render` (a job) → `studio_check` (a job; no FAIL, and each WARN fixed or explained to the user) → **look at the final sheet**
    (`stills/final-sheet.jpg`, returned as an image).
 
 Visual richness: every scene needs something to look at besides words: a drawn object, a scene, a
@@ -112,13 +123,23 @@ light and a moving camera beat small props in empty space.
 
 Wordless story, short film, drawn animation, music piece (like the Claude × Syn film):
 `"mode": "film"` in project.json (scenes as `{"id", "start", "end"}` in seconds, no voice; music = the user's
-song or a generated bed; `events` still place the sound effects). Draw it with the **sketch kit**
+song, the starter score or a generated bed; `events` still place the sound effects). Draw it with the **sketch kit**
 (`template/sketch.js`: hatching, line boil, ink outlines, textures, glow, camera; references/illustration.md,
 and the rendered snippets in references/styles.md) and `SS.start({cuts: "hard"})`. Read the kit itself with `studio_example`
 (`path: "template/sketch.js"`). Give the characters acting
-(references/character.md) and the shots cinema (references/cinema.md). No tool writes a custom score: when no
-track fits, use the generated bed (`warm`, `calm` or `upbeat`) that suits the act, or ask the user for a track
-and add it with `studio_file_add` (voice-and-audio.md).
+(references/character.md) and the shots cinema (references/cinema.md).
+**One cue sheet, then block before you draw.** Write every hit (a slam, a knock, a word landing) once, in
+project.json `"cues"` (`studio_file_write`), and read it everywhere: `CUE.slam` in the page, the same time in the
+sound, `"sync": true` on clean hits so `studio_check` measures their sync. `studio_cues` prints the sheet in time
+order. `studio_score` writes `src/assets/score.wav` from the bundled starter score (a soft bed and a placeholder
+hit on every cue) and sets `music` to it; then call `studio_audio`. You cannot write or run a score script of your own through the tools, so in
+Claude Desktop the real music is the user's licensed track (`studio_file_add`) or the starter's placeholder hits: say so
+plainly, and use a generated bed (`warm`, `calm` or `upbeat`) only when it suits the act (voice-and-audio.md).
+Then block the film with plain shapes at the real positions and the real camera, call `studio_stills` with
+`cues: true` (every cue 4 frames before, on the cue and 6 frames after, with a legend) and fix timing and
+staging (cinema.md §7) before any detail. Layout fixes on grey shapes are cheap; on a finished drawing they cost a
+rebuild. For a chase or any long move, add `range_from: 5`, `range_to: 12` and `every: 0.25`. Send the blocking
+stills when the user wants to see it early.
 
 Footage edit (like the HAURA founder reel) and photo ad to music (like the HAURA sale ad):
 references/footage.md (`studio_cut`, `studio_transcribe`, `studio_silences`, `studio_scenes`, `studio_beats`,
@@ -133,10 +154,17 @@ second? Is the message clear with the sound off? Does it feel made for this bran
 re-check (at most 3 rounds, then tell the user what still fails and why).
 
 ## 5. Deliver and learn
-Call `studio_open` for the MP4's absolute path (it also returns the `-share.mp4` copy when the file was large), and give it with one line on the idea and, for social posts, the
+Call `studio_open` for the MP4's absolute path (it also returns the `-share.mp4` copy when the file was large and the final
+sheet as a picture). The chat cannot play a video: ask the user whether to play it (`show: "player"`), show it in Finder
+(`show: "finder"`) or save a copy to a folder such as ~/Downloads (`save_to`), and do what they choose before asking for a
+verdict. Give the path with one line on the idea and, for social posts, the
 packaging (post caption, 3–5 specific hashtags, cover-frame time, AI-label reminder if an AI voice or visuals were
 used; craft.md). Over 25 MB, `studio_render` also writes a `-share.mp4` small enough to send in chat. Ask "a) Approve
-b) Change something  c) Start over". Log the answer in `feedback.md` (its format is in the file) and copy the WORKED /
+b) Change something  c) Start over". **Read feedback as KEEP, CUT and WHY.** For each "I like X" or "not Y", write
+one line: keep, cut, and why the user felt it (the feeling, not the object: "the key opening the door" means a
+physical payoff; "a story, not a montage" means a hero who wants something). Keep liked moments as payoffs inside
+the new spine. Answer a "not Y" with a new structure, not a polish. After "I hate it", change the story and at
+least three channels. Log the answer in `feedback.md` (its format is in the file) and copy the WORKED /
 AVOID lesson to the top of `brief.md` (`studio_file_write` replaces the whole file: read each with `studio_file_read`
 first and write back all of it), so the next video for this brand starts smarter. Offer one useful
 extra (a 1:1 cut-down, a second hook) without imposing it.
@@ -151,6 +179,13 @@ runnable examples are in `examples/` (read them with `studio_example`, for examp
 `synergy://examples/<name>/project.json` and `index.html`).
 
 ## Editing an existing video
+**Find the cause first.** You cannot hear the video. When the user says something sounds or looks wrong at a moment
+("a long pause", "the pop is loud", "the a.m. sounds odd"), or a check line warns, call `studio_inspect` with `from` and
+`to` about 1 s either side of it. Its picture puts the frames, the words the voice was given and the words Whisper
+heard, the voice, music and effect levels, and every warning on one time axis. Tell the user the cause you see (with
+the time) before changing anything, and say so when the picture shows nothing wrong. A silence between two lines is
+the scene gap, not the voice: the `post` of one scene plus the `pre` of the next (lower them in project.json, then
+`studio_audio`); a pause inside a line is the voice (`studio_voice` warns over 0.75 s).
 Change only what was asked, then re-check. New words for one scene: edit `say`, `studio_voice` with
 `only: ["s3"]`, `studio_audio`, render (all times follow). Visual changes: `src/index.html` → stills → render. The
 previous render is kept in `history/` with the project.json and index.html that made it. A finished MP4 with no

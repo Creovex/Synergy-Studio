@@ -27,6 +27,14 @@ A mascot that only slides across the screen is a sticker. Give it acting.
 | Happy | `^ ^` arcs | stretched up | bouncing on the beat, waving | any |
 | Proud / warm | `^ ^`, soft | side by side with a friend | slow sway | wide, two-shot |
 
+## Comedy (setups, threes, timing)
+- **Setup and payoff.** List each setup in shots.md with the shot that pays it off. No setup without a payoff.
+- **Rule of three.** Two tries set a pattern; the third breaks it (the rock, the tree, then the door).
+- **Escalate.** Each try costs more than the last ("nope", then "nope" and a leaf in the face).
+- **Timing.** Anticipation 0.2–0.4 s, action 0.1–0.2 s, reaction hold 0.4–0.8 s. The laugh is in the reaction.
+- **One gag at a time.** Clear the frame before a gag lands; nothing else moves at the moment of impact.
+- **Button.** After the payoff, end on one small beat: the villain's last try, a wink at the camera.
+
 ## Two characters together
 - Put them close; overlap them a little in depth; make them bounce slightly out of phase (half a beat) so they read as two individuals.
 - Give them moments where they look at each other.

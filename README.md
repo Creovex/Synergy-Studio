@@ -48,7 +48,7 @@ on your Mac instead.
 
 ## Owner's test in Claude Desktop (T18)
 
-1. Build the bundle as in step 1 above and confirm the last lines say the unpacked server lists 36 tools.
+1. Build the bundle as in step 1 above and confirm the last lines say the unpacked server lists 40 tools.
 2. Install `dist/synergy-studio.mcpb` in Claude Desktop (Settings, Extensions, Advanced settings, Install Extension).
 3. Quit Claude Desktop completely and open it again, then start a new chat.
 4. Ask: "Use Synergy Studio to create a new 15 second 9:16 video about drinking water before coffee."

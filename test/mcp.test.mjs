@@ -16,14 +16,14 @@ const SERVER = path.join(ROOT, "mcp", "server.mjs");
 const SKILL = path.join(ROOT, "skills", "synergy-studio");
 const FIXTURE = path.join(ROOT, "test", "fixtures", "mcp", "plain-hf");
 const REAL_HOME = process.env.SYNERGY_STUDIO_HOME || path.join(os.homedir(), "Library", "Application Support", "SynergyStudioLite");
-const INSTRUCTIONS = "Synergy Studio makes and improves videos. Call studio_guide first and follow it.";
+const { INSTRUCTIONS } = await import(path.join(ROOT, "mcp", "context.mjs"));
 
 const EXPECTED_TOOLS = [
-  "studio_audio", "studio_beats", "studio_budget", "studio_check", "studio_compose", "studio_cut", "studio_doctor",
+  "studio_audio", "studio_beats", "studio_brand_check", "studio_budget", "studio_check", "studio_compose", "studio_cues", "studio_cut", "studio_doctor",
   "studio_example", "studio_export", "studio_file_add", "studio_file_list", "studio_file_read", "studio_file_write", "studio_frames",
-  "studio_guide", "studio_hyperframes", "studio_import_hyperframes", "studio_job_log", "studio_job_status",
+  "studio_guide", "studio_hyperframes", "studio_import_hyperframes", "studio_inspect", "studio_job_log", "studio_job_status",
   "studio_look_from", "studio_open", "studio_project_import", "studio_project_list", "studio_project_new",
-  "studio_reference", "studio_reference_study", "studio_render", "studio_say", "studio_scenes", "studio_setup_start",
+  "studio_reference", "studio_reference_study", "studio_render", "studio_say", "studio_scenes", "studio_score", "studio_setup_start",
   "studio_silences", "studio_stills", "studio_synctest", "studio_transcribe", "studio_voice", "studio_words",
 ];
 
@@ -107,7 +107,13 @@ describe("empty tool home", () => {
     console.log(`initialize round trip incl. process start: ${connectMs} ms`);
     assert.ok(connectMs < 1000, `connect took ${connectMs} ms`);
     assert.equal(client.getInstructions(), INSTRUCTIONS);
+    assert.match(INSTRUCTIONS, /Call studio_guide first/);
     assert.equal(client.getServerVersion().name, "synergy-studio");
+  });
+
+  test("every tool the instructions name exists", async () => {
+    const { tools } = await client.listTools();
+    for (const n of INSTRUCTIONS.match(/studio_[a-z_]+/g)) assert.ok(tools.some((t) => t.name === n), n);
   });
 
   test("lists every tool, with descriptions, schemas and annotations", async () => {
@@ -137,6 +143,18 @@ describe("empty tool home", () => {
     const prompt = await client.getPrompt({ name: "improve-video", arguments: { video_path: "/tmp/a.mp4", goal: "add captions" } });
     assert.match(prompt.messages[0].content.text, /studio_guide/);
     await assert.rejects(client.getPrompt({ name: "new-video", arguments: {} }), /idea/);
+    const made = await client.getPrompt({ name: "new-video", arguments: { idea: "water before coffee" } });
+    assert.equal(made.messages[0].content.text, "Use Synergy Studio to make a video. Call studio_guide first and follow it. The idea: water before coffee");
+  });
+
+  test("every listed prompt has a template with each of its arguments (the bundle manifest declares these)", async () => {
+    const { PROMPTS, PROMPT_TEXT } = await import(path.join(ROOT, "mcp", "content.mjs"));
+    const { prompts } = await client.listPrompts();
+    for (const p of prompts) {
+      assert.equal(typeof PROMPT_TEXT[p.name], "string", p.name);
+      for (const a of p.arguments) assert.ok(PROMPT_TEXT[p.name].includes(`\${arguments.${a.name}}`), `${p.name}: ${a.name}`);
+    }
+    assert.deepEqual(Object.keys(PROMPT_TEXT).sort(), PROMPTS.map((p) => p.name).sort());
   });
 
   test("studio_guide equals SKILL.md with the skill folder resolved", async () => {
@@ -390,6 +408,16 @@ describe("installed tool home, temporary projects home", { skip: installed ? fal
     const withShare = textOf(await client.callTool({ name: "studio_open", arguments: { name: "plain-hf" } }));
     assert.match(withShare, /Full render: .*plain-hf\.mp4\n/);
     assert.match(withShare, /Smaller share copy: .*plain-hf-share\.mp4/);
+    const saveDir = fs.mkdtempSync(path.join(os.tmpdir(), "ss-save-"));
+    const saved1 = textOf(await client.callTool({ name: "studio_open", arguments: { name: "plain-hf", save_to: saveDir } }));
+    const saved2 = textOf(await client.callTool({ name: "studio_open", arguments: { name: "plain-hf", save_to: saveDir } }));
+    assert.match(saved1, /Saved a copy: .*plain-hf\.mp4/);
+    assert.match(saved2, /Saved a copy: .*plain-hf-2\.mp4/);
+    assert.equal(fs.statSync(path.join(saveDir, "plain-hf.mp4")).size, fs.statSync(path.join(projects, "plain-hf", "out", "plain-hf.mp4")).size);
+    const noFolder = await client.callTool({ name: "studio_open", arguments: { name: "plain-hf", save_to: path.join(saveDir, "missing") } });
+    assert.equal(noFolder.isError, true);
+    assert.match(textOf(noFolder), /does not exist/);
+    fs.rmSync(saveDir, { recursive: true, force: true });
 
     const check = await waitForJob(client, jobId(await client.callTool({ name: "studio_check", arguments: { name: "plain-hf" } })));
     console.log(textOf(check));

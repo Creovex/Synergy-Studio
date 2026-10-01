@@ -1,7 +1,10 @@
+import crypto from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
-import { SKILL, ENVF, die, run, env, readJSON, needNarrated, projDir, parseArgs } from "./common.mjs";
+import { SKILL, ENVF, die, say, run, env, readJSON, needNarrated, projDir, parseArgs } from "./common.mjs";
+import { listenBack } from "./listen.mjs";
 
-export const USAGE = "voice <dir> [--only s2,s4]";
+export const USAGE = "voice <dir> [--only s2,s4] [--no-listen]";
 
 // the ten voices a project may use (LITE 7.4); a British voice starts with b and speaks en-gb
 export const VOICES = ["af_heart", "af_bella", "af_nova", "af_sky", "am_michael", "am_adam", "bf_emma", "bf_isabella", "bm_george", "bm_lewis"];
@@ -48,11 +51,22 @@ function voice(dir, only) {
   const bad = sceneIdProblem(proj) || projectVoiceProblem(proj) || speedProblem(proj); if (bad) die(bad);
   if (only) { const ids = proj.scenes.map(s => s.id), missing = String(only).split(",").filter(x => !ids.includes(x));
     if (missing.length) die(`--only: no scene ${missing.join(", ")} (scenes: ${ids.join(", ")})`); }
-  run(e.python, [path.join(SKILL, "scripts", "voice.py"), ENVF, d, only || ""]);
+  // The voice engine can crash while Python shuts down, after every file was written. voice.py writes
+  // audio/voice-done.json with this run's id as its last act; a failed exit is accepted only when that file names this run.
+  const runId = crypto.randomUUID(), done = path.join(d, "audio", "voice-done.json");
+  fs.rmSync(done, { force: true });
+  const r = run(e.python, [path.join(SKILL, "scripts", "voice.py"), ENVF, d, only || ""], { soft: true, env: { SS_VOICE_RUN: runId } });
+  if (r.status !== 0) {
+    let finished = false; try { finished = readJSON(done).run === runId; } catch { finished = false; }
+    if (!finished) die(r.error ? `voice.py failed to start: ${r.error.message}` : `voice.py stopped (exit ${r.status ?? r.signal}): see the message above`);
+    say(`  note: the voice engine crashed while closing (${r.signal ?? `exit ${r.status}`}) after every file of this run was written; the narration is complete`);
+  }
+  return { e, d, ids: only ? String(only).split(",") : proj.scenes.map((s) => s.id) };
 }
 
 export async function main(argv) {
   const { flags, pos } = parseArgs(argv);
-  voice(pos[0], flags.only);
+  const { e, d, ids } = voice(pos[0], flags.only);
+  if (!flags["no-listen"]) await listenBack(e, d, ids);                 // Whisper hears each line back (lib/listen.mjs)
   return 0;
 }

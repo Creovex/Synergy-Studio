@@ -56,16 +56,30 @@ export function guideAppendix() {
     "Plain HyperFrames folders: studio_import_hyperframes, then studio_hyperframes (lint, render, snapshot and the other allowed commands), then studio_check.",
     "Limits in Claude Desktop: there is no web access, so fonts beyond the bundled Manrope, Inter, Cormorant Garamond and Jost come only from files the user gives (studio_file_add); a video attached in the chat has no file path, so ask the user to type the path of the file on the Mac.",
     "",
-    `References (read one with studio_reference name): ${referenceNames().join(", ")}.`,
+    "References (read one with studio_reference name):",
+    ...referenceIndex().map((l) => `- ${l}`),
     `Examples (resources synergy://examples/<name>/project.json and index.html): ${exampleNames().join(", ")}.`,
   ].join("\n");
 }
+
+// the title of a reference (its first "# " heading), which says what it is for; read from the file so it never goes stale
+export function referenceTitle(name) {
+  try {
+    const line = fs.readFileSync(path.join(REF_DIR, `${name}.md`), "utf8").split("\n").find((l) => l.startsWith("# "));
+    return line ? line.slice(2).trim() : name;
+  } catch {
+    return name;
+  }
+}
+
+// one line per reference: "name: title"
+export const referenceIndex = () => referenceNames().map((n) => `${n}: ${referenceTitle(n)}`);
 
 // ---------------------------------------------------------------- resources
 export function listResources() {
   const items = [{ uri: "synergy://skill", name: "skill", title: "Synergy Studio guide", description: "SKILL.md: how to make and improve videos with these tools.", mimeType: "text/markdown" }];
   for (const name of referenceNames()) {
-    items.push({ uri: `synergy://references/${name}`, name: `reference-${name}`, title: `Reference: ${name}`, description: `The ${name} reference of the skill.`, mimeType: "text/markdown" });
+    items.push({ uri: `synergy://references/${name}`, name: `reference-${name}`, title: `Reference: ${name}`, description: referenceTitle(name), mimeType: "text/markdown" });
   }
   for (const name of exampleNames()) {
     items.push({ uri: `synergy://examples/${name}/project.json`, name: `example-${name}-project`, title: `Example ${name}: project.json`, description: `project.json of the ${name} example.`, mimeType: "application/json" });
@@ -116,21 +130,24 @@ export const PROMPTS = [
   },
 ];
 
+// the text of each prompt, with ${arguments.<name>} where an argument goes; the server fills it in, and the bundle's
+// manifest carries the same text, because Claude Desktop refuses a prompt its extension manifest does not declare
+export const PROMPT_TEXT = {
+  "new-video": "Use Synergy Studio to make a video. Call studio_guide first and follow it. The idea: ${arguments.idea}",
+  "improve-video": "Use Synergy Studio to improve an existing video. Call studio_guide first and follow it. The video is at ${arguments.video_path}. Improve it like this: ${arguments.goal}. Start with studio_frames on the file, then studio_project_import.",
+};
+
 export function getPrompt(name, args = {}) {
+  const prompt = PROMPTS.find((p) => p.name === name);
+  if (!prompt) throw rpcError(`Unknown prompt: ${name}`, -32602);
   const need = (key) => {
     const value = args?.[key];
     if (typeof value !== "string" || value.trim() === "") throw rpcError(`The prompt ${name} needs the argument ${key}.`, -32602);
     return value.trim();
   };
-  let text;
-  if (name === "new-video") {
-    text = `Use Synergy Studio to make a video. Call studio_guide first and follow it. The idea: ${need("idea")}`;
-  } else if (name === "improve-video") {
-    text = `Use Synergy Studio to improve an existing video. Call studio_guide first and follow it. The video is at ${need("video_path")}. Improve it like this: ${need("goal")}. Start with studio_frames on the file, then studio_project_import.`;
-  } else {
-    throw rpcError(`Unknown prompt: ${name}`, -32602);
-  }
-  return { description: PROMPTS.find((p) => p.name === name).description, messages: [{ role: "user", content: { type: "text", text } }] };
+  const values = Object.fromEntries(prompt.arguments.map((a) => [a.name, need(a.name)]));
+  const text = PROMPT_TEXT[name].replace(/\$\{arguments\.(\w+)\}/g, (_, key) => values[key]);
+  return { description: prompt.description, messages: [{ role: "user", content: { type: "text", text } }] };
 }
 
 // ---------------------------------------------------------------- examples and templates as files

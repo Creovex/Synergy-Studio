@@ -87,6 +87,52 @@ function mixLine(e, mp4, mix, fps, add, label = "audio/mix.wav", { hasAudio = tr
   add("audio against mix", j.pass, j.pass ? `${lagText}; last 2 s match; no silent stretch where the mix has sound` : `${lagText}: ${j.problems.join("; ")}`);
 }
 
+// A/V sync of the cues marked "sync": true: the sound of each one starts on its frame (scripts/sync.py), one line per cue
+export const SYNC_WINDOW = 0.15;                        // how far from the cue sync.py looks for the hit, in seconds (its WINDOW)
+export const SYNC_FRAMES = 1.5;                         // how far the sound may sit from the cue, in frames
+export function syncRow(row, fps) {
+  const tol = SYNC_FRAMES / fps, name = `sync ${row.name}`;
+  if (row.d === null || row.d === undefined) return { name, ok: false, info: `no sound near ${row.t} s` };
+  if (row.sharp === false) return { name, ok: false, info: `${row.t.toFixed(2)} s: no sharp onset within ±${SYNC_WINDOW} s of the cue (the sound only swells there)` };
+  return { name, ok: Math.abs(row.d) <= tol + 1e-9, info: `${row.t.toFixed(2)} s: audio ${row.d >= 0 ? "+" : ""}${row.d.toFixed(3)} s (max ±${SYNC_FRAMES} frames = ${tol.toFixed(3)} s)` };
+}
+function syncLines(e, out, mp4, timing, fps, hasAudio, add) {
+  const cues = Object.fromEntries((timing.SYNC || []).filter(n => (timing.CUE || {})[n] !== undefined).map(n => [n, timing.CUE[n]]));
+  if (!Object.keys(cues).length) return;
+  if (!hasAudio) return Object.keys(cues).forEach(n => add(`sync ${n}`, false, "no audio stream in the video, so its sound cannot be compared with the cue"));
+  const wav = path.join(out, "sync.wav");
+  run(e.ffmpeg, ["-loglevel", "error", "-y", "-i", mp4, "-vn", "-ac", "1", "-ar", "16000", wav]);
+  const r = run(e.python, [path.join(SKILL, "scripts", "sync.py"), wav, JSON.stringify(cues), String(fps)], { capture: true, soft: true });
+  fs.rmSync(wav, { force: true });
+  let rows; try { rows = JSON.parse(r.stdout); } catch { return add("sync", false, "sync.py failed: " + (r.stderr || "").trim().split("\n").pop().slice(0, 200)); }
+  for (const x of rows) { const c = syncRow(x, fps); add(c.name, c.ok, c.info); }
+}
+
+// the voice and balance reports of studio voice and studio audio (speech.py, listen.mjs) as WARN lines: they do not
+// fail the video (Whisper can mishear), but each needs a fix or a reason given to the user
+function soundLines(d, add) {
+  const read = (f) => { try { return JSON.parse(fs.readFileSync(path.join(d, "audio", f), "utf8")); } catch { return null; } };
+  const vr = read("voice-report.json");
+  if (vr) {
+    const notes = [];
+    for (const [id, r] of Object.entries(vr)) {
+      for (const p of r.problems || []) notes.push(`${id} at ${p.at} s ${p.broken ? "breaks up" : "says"} "${p.heard}" for "${p.expected}"`);
+      for (const p of r.pauses || []) notes.push(`${id} pauses ${p.length} s at ${p.at} s`);
+      for (const w of r.warnings || []) notes.push(`${id}: ${w}`);
+    }
+    const heard = Object.values(vr).filter((r) => typeof r.heard === "string").length;
+    add("voice heard back", true, notes.length ? `${notes.length} problem(s): ${notes.slice(0, 4).join("; ")}${notes.length > 4 ? "; ..." : ""} (audio/voice-report.json)`
+      : `${heard} of ${Object.keys(vr).length} line(s) heard back as written, no long pauses`, notes.length > 0 || heard < Object.keys(vr).length);
+  }
+  const mr = read("mix-report.json");
+  if (mr && mr.voice_db !== null) {
+    const loud = (mr.effects || []).filter((x) => !x.ok);
+    const notes = [...(mr.music_ok ? [] : [`music only ${mr.music_under_db} dB under the voice`]), ...loud.map((x) => `${x.name} at ${x.at} s is ${x.over_voice_db} dB over the voice`)];
+    add("sound balance", true, notes.length ? `${notes.join("; ")} (audio/mix-report.json)`
+      : `music ${mr.music_under_db ?? "none"}${mr.music_under_db !== null ? " dB" : ""} under the voice; ${(mr.effects || []).length} effect(s), none louder than the voice`, notes.length > 0);
+  }
+}
+
 // ---------------------------------------------------------------- check
 function check(dir) {
   const e = env(), d = projDir(dir), proj = readJSON(path.join(d, "project.json")), plain = proj.kind === "hyperframes";
@@ -95,7 +141,7 @@ function check(dir) {
   const out = path.join(d, "out"); const mp4 = [out, ...(plain ? [path.join(d, "renders")] : [])].filter(fs.existsSync).flatMap(o => fs.readdirSync(o).filter(f => f.endsWith(".mp4") && !/-share\.mp4$|^render-raw/.test(f)).map(f => path.join(o, f)))[0];
   if (!mp4) die("no video yet: run `studio render` first");
   fs.mkdirSync(out, { recursive: true });
-  const res = { file: mp4, checks: [] }; const add = (name, ok, info) => res.checks.push({ name, ok, info });
+  const res = { file: mp4, checks: [] }; const add = (name, ok, info, warn = false) => res.checks.push({ name, ok, info, ...(warn ? { warn: true } : {}) });
   const pr = JSON.parse(run(e.ffprobe, ["-v", "error", "-show_entries", "stream=codec_type,codec_name,width,height,r_frame_rate,duration:format=duration", "-of", "json", mp4], { capture: true }).stdout);
   const v = pr.streams.find(s => s.codec_type === "video"), a = pr.streams.find(s => s.codec_type === "audio"), dur = +pr.format.duration;
   const [W, Hh] = plain ? [page.width, page.height] : SIZES[proj.aspect || "16:9"], fps = proj.fps || page?.fps || 30;
@@ -105,7 +151,7 @@ function check(dir) {
   add("audio stream", !!a && a.codec_name === "aac", a ? a.codec_name : "missing (every data-start element needs an id)");
   const total = plain ? page.duration : timing.TOTAL;
   add("duration", total !== null && Math.abs(dur - total) <= 0.15, total === null ? `${dur.toFixed(2)} s (index.html has no data-duration on its root element to compare with)` : `${dur.toFixed(2)} s (${plain ? "data-duration" : "timeline"} ${total} s ± 0.15 s)`);
-  if (proj.length) add("target length", dur <= proj.length * 1.05, `${dur.toFixed(1)} s (target ${proj.length} s)` + (dur < proj.length * 0.8 ? ` — note: ${Math.round(100 - 100 * dur / proj.length)}% shorter than the target; fine if on purpose` : ""));
+  if (proj.length) add("target length", dur <= proj.length * 1.05, `${dur.toFixed(1)} s (target ${proj.length} s)` + (dur < proj.length * 0.8 ? `; note: ${Math.round(100 - 100 * dur / proj.length)}% shorter than the target; fine if on purpose` : ""));
   const lo = a ? run(e.ffmpeg, ["-hide_banner", "-i", mp4, "-vn", "-af", "ebur128=peak=true", "-f", "null", "-"], { capture: true, soft: true }).stderr : "";
   const I = +(lo.match(/I:\s+(-?[\d.]+) LUFS/g) || []).pop()?.match(/-?[\d.]+/)[0], TP = +(lo.match(/Peak:\s+(-?[\d.]+) dBFS/g) || []).pop()?.match(/-?[\d.]+/)[0];
   const why = !a ? "no audio stream in the video" : "the loudness could not be measured (the audio is silent or unreadable)";
@@ -116,8 +162,10 @@ function check(dir) {
   const fr = run(e.ffmpeg, ["-hide_banner", "-i", mp4, "-vf", "freezedetect=n=0.001:d=4", "-an", "-f", "null", "-"], { capture: true, soft: true }).stderr;
   const frozen = [...fr.matchAll(/freeze_start: ([\d.]+)[\s\S]*?freeze_duration: ([\d.]+)/g)].map(m => `${(+m[1]).toFixed(1)} s for ${(+m[2]).toFixed(1)} s`);
   add("nothing frozen ≥ 4 s", frozen.length === 0, frozen.length ? "still at " + frozen.join(", ") + " (add motion there)" : "ok");
+  if (!plain) syncLines(e, out, mp4, timing, fps, !!a, add);
   if (!plain || proj.mix) mixLine(e, mp4, plain ? insideProject(d, proj.mix) : path.join(d, "audio", "mix.wav"), fps, add, plain ? String(proj.mix) : undefined, { hasAudio: !!a, seconds: +v?.duration || undefined });
   if (!plain) { const src = path.join(d, "src", "index.html"); if (fs.existsSync(src)) captionsLine(d, proj, fs.readFileSync(src, "utf8"), dur, add); }
+  if (!plain) soundLines(d, add);
   const sd = path.join(d, "stills"); fs.mkdirSync(sd, { recursive: true });
   if (plain) videoSheet(e, mp4, path.join(sd, "final-sheet.jpg"), { n: 8 });
   else {
@@ -127,7 +175,7 @@ function check(dir) {
   }
   res.sheet = path.join(sd, "final-sheet.jpg"); res.pass = res.checks.every(c => c.ok);
   fs.writeFileSync(path.join(out, "check.json"), JSON.stringify(res, null, 2));
-  for (const c of res.checks) say(`${c.ok ? "PASS" : "FAIL"}  ${c.name}: ${c.info}`);
+  for (const c of res.checks) say(`${!c.ok ? "FAIL" : c.warn ? "WARN" : "PASS"}  ${c.name}: ${c.info}`);
   say(`contact sheet: ${res.sheet}\n${res.pass ? "All automatic checks passed. Now LOOK at the contact sheet and watch the video before delivering." : "Fix the FAIL lines (references/checks-and-fixes.md), then render and check again."}`);
   if (!res.pass) process.exit(2);
 }

@@ -5,10 +5,44 @@ import { compose } from "./compose.mjs";
 
 const PLATFORMS = [...Object.keys(SAFE), "youtube", "linkedin", "x", "website"];
 
-export const USAGE = "stills <dir> [t1 t2 …] [--platform p]";
+export const USAGE = "stills <dir> [t1 t2 …] [--cues] [--range a:b --every s] [--platform p]";
+
+const CUE_OFFSETS = [[-4, "before"], [0, ""], [6, "after"]];   // frames around each cue: anticipation, the hit, the reaction
+const DEFAULT_EVERY = 0.25;
+
+// ---- the extra frames of --cues and --range (pure: the tests call them)
+// every cue at -4, 0 and +6 frames; `legend` maps each time to what it shows (time in milliseconds is the key)
+export function cueFrames(timing, fps = timing.fps || 30) {
+  const cues = Object.entries(timing.CUE || {}), frames = [], legend = new Map(), last = timing.TOTAL - 0.05;
+  for (const [name, t] of cues) for (const [df, tag] of CUE_OFFSETS) {
+    const want = t + df / fps, x = +Math.min(last, Math.max(0, want)).toFixed(3);
+    const edge = want < 0 ? "clamped to the start of the video" : want > last ? "clamped to the end of the video" : "";
+    const note = [tag, edge].filter(Boolean).join(", ");
+    frames.push(x); const key = Math.round(x * 1000); legend.set(key, [...(legend.get(key) || []), note ? `${name} (${note})` : name]);
+  }
+  return { frames, legend };
+}
+
+// --range a:b [--every s]: one frame every `every` seconds from a to b, both ends included
+export function rangeFrames(range, every, total) {
+  const m = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(String(range)), ev = every === undefined ? DEFAULT_EVERY : Number(every);
+  if (!m || !(+m[2] > +m[1]) || !(ev > 0) || every === true) throw new Error("usage: studio stills <dir> --range <from>:<to> [--every 0.25] (seconds, to after from)");
+  const a = +m[1], b = +m[2];
+  if (b > total) throw new Error(`stills: --range ${range} ends after the video (${total} s)`);
+  const steps = Math.floor((b - a) / ev + 1e-9), out = [];                // integer steps, so rounding cannot drop a frame
+  for (let k = 0; k <= steps; k++) out.push(+(a + k * ev).toFixed(3));
+  if (out[out.length - 1] < b - 1e-6) out.push(+b.toFixed(3));              // the end of the range is always shown
+  if (out.length > 120) throw new Error(`stills: --range gives ${out.length} frames; use a larger --every (at most 120 frames)`);
+  return out;
+}
+
+// the legend file: the frame's number on the contact sheet, its time and frame number, and what it shows
+export function legendText(at, legend, fps = 30) {
+  return at.map((x, i) => `${String(i + 1).padStart(3)}. ${x.toFixed(3)} s  frame ${Math.round(x * fps)}  ${(legend.get(Math.round(x * 1000)) || []).join(", ")}`.trimEnd()).join("\n") + "\n";
+}
 
 // ---------------------------------------------------------------- stills
-function stills(dir, times, platform) {
+function stills(dir, times, platform, opts = {}) {
   const e = env(), d = projDir(dir);
   if (!fs.existsSync(path.join(d, "timing.json"))) die(`no timing.json yet: run studio audio ${dir} first`);
   const bad = times.filter(x => !Number.isFinite(+x)); if (bad.length) die(`stills: times must be seconds, e.g. studio stills ${dir} 1.5 4 (got ${bad.join(", ")})`);
@@ -25,7 +59,14 @@ function stills(dir, times, platform) {
   } catch (err) { if (err && err.message && err.message.startsWith("ERROR")) throw err; }
   // default frames: 0.3 s (the hook frame), then for each scene its middle and the end of its narration, then the last second
   const def = [0.3]; for (const t of Object.values(timing.T)) { def.push((t.start + t.end) / 2, Math.min(t.vo_end, t.end - 0.4)); } def.push(timing.TOTAL - 0.5);
-  const at = times.length ? times.map(Number) : [...new Set(def.map(x => +Math.max(0, x).toFixed(2)))].sort((a, b) => a - b);
+  let extra = [], legend = new Map();
+  if (opts.cues) {                                        // each cue: 4 frames before (anticipation), the hit, 6 frames after (reaction)
+    if (!Object.keys(timing.CUE || {}).length) die(`stills --cues: project.json has no "cues" (add them, then run studio audio ${dir})`);
+    ({ frames: extra, legend } = cueFrames(timing));
+  }
+  if (opts.range !== undefined) { try { extra = [...extra, ...rangeFrames(opts.range, opts.every, timing.TOTAL)]; } catch (err) { die(err.message); } }
+  const asked = [...times.map(Number), ...extra];
+  const at = asked.length ? [...new Set(asked)].sort((a, b) => a - b) : [...new Set(def.map(x => +Math.max(0, x).toFixed(2)))].sort((a, b) => a - b);
   // each run replaces the old stills; the look cards (made by `look`) and the source sheet (made by `import`) are kept
   const out = path.join(d, "stills"); const KEEP = /^(look-card.*|source-sheet)\.jpg$/;
   // HyperFrames' snapshot empties its output folder, so the kept files wait outside it during the capture
@@ -47,11 +88,14 @@ function stills(dir, times, platform) {
     sheet(e, guides, path.join(out, `safe-${plat}.jpg`), 1080, 1920);
     say(`safe-area guide (${plat}): stills/safe-${plat}.jpg (red = covered by the app; keep text out, except captions)`);
   }
+  if (legend.size) { fs.writeFileSync(path.join(out, "cues.txt"), legendText(at, legend, timing.fps || 30)); say("cue legend (the numbers on the contact sheet, stills/cues.txt):\n" + legendText(at, legend, timing.fps || 30).trimEnd()); }
   say(`stills: ${frames.length} frames at ${at.join(", ")} s → LOOK at stills/sheet.jpg (all frames, in time order)` + (SAFE[plat] ? ` and stills/safe-${plat}.jpg` : ""));
 }
 
 export async function main(argv) {
   const { flags, pos } = parseArgs(argv);
-  stills(pos[0], pos.slice(1), flags.platform);
+  // a bare --cues swallows the next plain number as its value: give it back as a time
+  const times = pos.slice(1); if (typeof flags.cues === "string") times.unshift(flags.cues);
+  stills(pos[0], times, flags.platform, { cues: !!flags.cues, range: flags.range, every: flags.every });
   return 0;
 }

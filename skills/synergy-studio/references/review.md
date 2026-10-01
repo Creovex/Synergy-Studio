@@ -26,6 +26,8 @@ an AVOID line in feedback.md. If you can start a fresh sub-agent, give it only t
 27. ◇ Characters act: anticipation, squash, eyes that lead, a readable emotion per act (character.md).
 28. ◇ The tone card is visible and audible: someone shown the video muted, then with sound, would name the
     same tone words as the brief (tone.md). It does not look like the template or the last video.
+29. ◇ Every gag and action beat has a still at its setup, action and reaction, and each reads alone: the
+    chaser, the hero's eyes and the payoff object are visible, and no burst frame is a jumble (cinema.md §7).
 
 ## Brief and frame (from brief.md)
 5. ◇ The single message appears in the narration or on-screen text.

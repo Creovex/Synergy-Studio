@@ -6,7 +6,7 @@ commands.md; this page says when to use which tool and how the tools behave.
 Messages printed by a tool sometimes name a step the way the older command line did, for example "studio audio". Read
 that as the tool `studio_audio`: every command has a tool of the same name with an underscore, except `setup`
 (`studio_setup_start`), `doctor` (`studio_doctor`), `new` (`studio_project_new`), `import` (`studio_project_import`),
-`reference` (`studio_reference_study`) and `look` (`studio_look_from`).
+`reference` (`studio_reference_study`), `look` (`studio_look_from`) and `brand` (`studio_brand_check`).
 
 ## Which tool when
 | You want to | Tool |
@@ -24,9 +24,12 @@ that as the tool `studio_audio`: every command has a tool of the same name with 
 | bring the user's own logo, photo, clip, song or font in | `studio_file_add` |
 | plan the words, make the voice, build the timing and mix | `studio_budget`, `studio_say`, `studio_voice`, `studio_audio`, `studio_words` |
 | cut, transcribe and analyse footage | `studio_cut`, `studio_transcribe`, `studio_silences`, `studio_scenes`, `studio_beats` |
-| see every lint error, or look at the video before rendering | `studio_compose`, `studio_stills` |
+| write the cue sheet of a film, read it back, and make the starter score with a hit on every cue | project.json `cues` (`studio_file_write`), `studio_cues`, `studio_score` |
+| see every lint error, or look at the video before rendering (`cues: true` shoots every cue before, on and after; `range_from`, `range_to` and `every` shoot a whole shot) | `studio_compose`, `studio_stills` |
+| measure how much of a picture is in the brand colour (ACCENT, HEAVY or FLOODED) | `studio_brand_check` |
 | render and verify | `studio_render`, `studio_check` |
-| find the MP4 (and its `-share.mp4` when the file was large) again, or file a project's sources in a repository | `studio_open`, `studio_export` |
+| find the cause of a problem the user hears or sees at a moment (you cannot hear): frames, words heard, voice, music and effect levels and warnings on one time axis | `studio_inspect` |
+| deliver the MP4: its path, play it, show it in Finder or save a copy to a folder (`show`, `save_to`); or file a project's sources in a repository | `studio_open`, `studio_export` |
 | follow or debug long work | `studio_job_status`, `studio_job_log` |
 | prove picture and sound line up on this computer | `studio_synctest` |
 | an older plain HyperFrames folder | `studio_import_hyperframes`, `studio_hyperframes`, `studio_check` |
@@ -52,8 +55,8 @@ Any other tool that runs past the limit becomes one too, and says so.
 Contact sheets, stills, safe area guides, look cards, source sheets and the final sheet are returned as images (JPEG,
 at most 1600 px wide and 1 MB) inside the result of the tool or job that made them. Look at each one and judge it
 (review.md). To look again later, or at one frame at full size, call `studio_file_read` with the path, for example
-`stills/sheet.jpg` or `stills/frame-02-at-4s.png`. Videos are never returned: give the user the path from
-`studio_open`.
+`stills/sheet.jpg` or `stills/frame-02-at-4s.png`. Videos are never returned in the chat: call `studio_open` with
+`show: "player"` to play it for the user, `show: "finder"` to show the file, or `save_to` to copy it where they want it.
 
 ## File path rules
 - A project is one folder in the server's projects folder (on a Mac `~/Movies/Synergy Studio`). You name it
@@ -81,7 +84,7 @@ at most 1600 px wide and 1 MB) inside the result of the tool or job that made th
   `remove-background` may download a model the first time. Transcription for captions normally has its model from
   setup; if the download is blocked, `studio_transcribe` says what is missing, and you can import a `.srt` instead (an existing `.srt` on the Mac: `studio_file_add` with `from_path` (it lands in `src/assets/`, for example `src/assets/subs.srt`), then `studio_transcribe` with `file: "src/assets/subs.srt"`; captions you write yourself: `studio_file_write` of `subs.srt` at the project root, then `file: "subs.srt"`).
 - **No terminal.** Everything you would have run by hand is a tool. If an instruction cannot be done with a tool
-  (for example writing a custom music score), say so and offer the nearest thing: a generated bed or the user's track.
+  (for example writing a custom music score), say so and offer the nearest thing: the starter score (`studio_score`, a hit on every cue), a generated bed or the user's track.
 
 ## Examples and templates
 `studio_example` reads a file of the skill's examples or templates: `path` is relative to the skill folder and only under

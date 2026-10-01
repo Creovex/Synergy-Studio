@@ -462,3 +462,71 @@ failed on a sonnet judge's reading of contact sheets, and T18, the only test whe
 Desktop, has not run.
 
 Sizes: tool home 2.0 GB (`du -sh`); tracked files 2016 KB; `.git` 2.6 MB before the final commit.
+
+## L11: Claude Desktop in use, voice and sound checks, studio_inspect, and the owner's 4c18ddf
+
+After the push, James ran the bundle in Claude Desktop and Cowork. What that showed, and what was done (evidence in the
+ledger; every item measured before and after, then attacked by an independent verifier):
+
+- **Prompts refused in Desktop.** Its log: `Extension Synergy Studio attempted undeclared prompt: new-video`. The bundle's
+  manifest now declares both prompts from the same text the server uses; Desktop then logged `content matches declared template`.
+- **Every job tool failed in Desktop and Cowork.** Desktop runs the server inside its own app, where the program running
+  it is the Claude app, which cannot run a script; each job's runner never started and the call failed after the 15 s
+  start grace (three calls of 15.08 s in Desktop's log). Jobs now always run on the tool home's own Node. After the fix,
+  James's AllSpace video went through voice, audio, stills, render and check in Desktop with no error.
+- **Logs.** `server.log` now has one line per call (tool, ms, ok or ERROR and the first line of the error), names the
+  program that runs each job, logs a runner that fails to start, keeps failed job records, and tags every line with the
+  process and the client (`[7140 claude-code]`, `[6589 t14]`), so a Desktop chat, a build and a test run are told apart.
+- **Delivery.** `studio_open` can play the MP4 (`show: "player"`), show it in Finder or copy it to a folder (`save_to`,
+  never over a file), and returns the final sheet; the chat cannot play a video.
+- **Voice and sound checks** (ARCHITECTURE.md had them; LITE.md had dropped them without naming the gap). `speech.py`
+  gives abbreviations their spoken form (`2 a.m.` was heard back as `2A, M.`; now `2 AM`), warns about text the voice
+  misreads and finds pauses over 0.75 s inside a line; `lib/listen.mjs` has Whisper hear every line back and compares
+  it word by word; `studio_audio` measures music against the voice and every effect against the voice (the default pop
+  sat 4.8 dB over the voice and was lowered); `studio_check` shows `voice heard back` and `sound balance` as PASS or WARN.
+- **studio_inspect.** One picture of a stretch of the video: frames, scenes, the voice level with the words heard, music,
+  effects, cues and the finished level on one time axis, warnings in red, and the same timeline as text.
+- **Voice crash at exit.** Seen once in about 58 runs (`recursive_mutex lock failed` after every file was written);
+  not reproduced on demand (0 of 54). `voice.py` now writes a marker with the run's id as its last act and the step
+  accepts a crash only after it; proven with forced crashes before and after the marker.
+- **The owner's 7ba5f25..4c18ddf**, ported by three workers with one owner per file (plan in the ledger):
+  self-correcting loudness (own peaky score, crest 20.5 dB: before -15.8 LUFS, after -14.0; narrated and songs equal),
+  the cue sheet (`CUE` in the page, `studio_cues`, cue stills at -4, 0 and +6 frames, `sync <cue>` lines in check with
+  a falsifier that fails a hit moved 3 frames), the bundled starter score (`studio_score`, deterministic, sets the
+  music), the text (pitch cheap, block before drawing, KEEP/CUT/WHY, director rules) and brand colour roles with a
+  measured check (`studio_brand_check`: all blue 97% FLOODED, a blue mascot on cream 1% ACCENT). The tools never run
+  code a model wrote, so in Claude Desktop a real score is the user's track (named gap).
+- **Independent verifier** (behaviour only, its own script): round 1 72 PASS, 9 FAIL with defects D1 to D10; all fixed
+  by their owners; round 2 77 PASS, 5 FAIL, where the 5 are two named gaps, music at -73 dBFS now kept silent by
+  design (documented) and a probe that misread a correct refusal. A fresh reader answered all ten questions from the
+  text; six contradictions it found were fixed, the older ones are listed for James.
+
+Full pass on the final code (ledger/evidence/L12-full-2026-09-30-1.txt), literal:
+```
+ℹ tests 242  ℹ pass 242  ℹ fail 0          199 passed (pytest)          86 items: 86 PASS, 0 FAIL (T0, 40 tools)
+PASS  median onset error: 4 ms              PASS  synctest: every flash and beep within one frame, mean offset 1 ms
+PASS  hydration-tips / three-product / footage-captions, PASS falsifier (T5)
+PASS  hydration-tips rendered twice: frames at 1, 14.066, 27.133 s: identical, identical, identical (T6)
+T15 PASS: 20 MCP calls                      smoke test: the unpacked server answered initialize and lists 40 tools (T17)
+```
+Two headless Sonnet builds with only the plugin's tools and the old installed plugin disabled: a wordless film (door
+slam at 6 s, bell at 10 s) and a narrated ad (Dr. Lee, Main St., 8 a.m. to 6 p.m., 30% off, a brand colour). 0 tool
+errors; the orchestrator's own check: film `sync slam: 6.00 s: audio +0.005 s`, `sync bell: 10.00 s: audio +0.000 s`;
+ad `voice heard back: 3 of 3 line(s) heard back as written`, `sound balance: music 6.7 dB under the voice`, brand
+4 of 4 ACCENT. Server log for the two builds: 56 calls, 56 ok, 0 errors; every job on the tool home's Node.
+
+Named gaps from this round: thresholds (0.75 s, 6 dB, 3 dB) rest on few projects; Whisper can mishear a name (WARN, not
+FAIL); tone and emotion are not judged; a cue typed as a whole number in the page is not caught; on the starter score a
+cue 0.2 s from its hit can still pass sync; the starter's hits are placeholders (a soft bump, not a slam); no per
+effect gain; Claude Desktop itself was used by James, not by the builder (T18 stays PENDING until he reports).
+
+## Final report (updated after L11)
+
+The per test proof table of the first final report above still stands, with these updates from L11: T0 86 items all
+PASS with the 40 tool list; T5, T6, T15 and T17 rerun on the final code and PASS; node 242 and pytest 199 tests pass.
+Every test from T0 to T17 with T7s and T16b is PASS, except:
+- T13, BLOCKED after three rounds: awaiting James's written acceptance, or his permission for a fourth round.
+- T18, PENDING: James installs `dist/synergy-studio.mcpb` in Claude Desktop and reports. His first uses found the
+  prompt and job failures fixed in L11; the rebuilt bundle has not yet been through his test.
+Largest gap: the videos are judged by measurements and by a model reading stills, not by a person watching and
+listening; T18 is where James does that, and it has not finished.

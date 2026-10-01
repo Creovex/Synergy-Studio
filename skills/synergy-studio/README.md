@@ -35,7 +35,8 @@ there is no terminal. The architecture is summarised in `code/synergy-studio/LIT
 - `SKILL.md`: the workflow Claude follows.
 - `references/`: creative (finding the idea), intake (brief and business frame), craft (short-form know-how,
   platform specs), storytelling, design (looks, sizes, safe areas), styles (how to reach any style, with rendered
-  snippets), tone, cinema, illustration, character, hyperframes, voice-and-audio, footage (cuts, captions, beats),
+  snippets), tone, brand-colours (a brand colour as an accent, with a check), cinema, illustration, character,
+  hyperframes, voice-and-audio, footage (cuts, captions, beats),
   three, review (guard rails ⛔ and craft checks ◇), checks-and-fixes, generators (AI image and video tools if
   connected), troubleshooting, commands (the tool reference) and mcp (working through the server).
 - `template/`: `index.html` (page skeleton with `{{…}}` placeholders), `lib.js` (animation helpers and captions),

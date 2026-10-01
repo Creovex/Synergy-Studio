@@ -2,7 +2,7 @@
 // Synergy Studio CLI: make narrated motion-graphics videos with HyperFrames + GSAP + Kokoro.
 // Node >= 20, built-ins only. Run `node studio.mjs help`.
 // A thin dispatcher: every command lives in lib/<command>.mjs and exports USAGE and main(argv).
-// Commands: setup doctor synctest new budget say voice audio words compose stills render check cut transcribe silences scenes beats reference frames import look
+// Commands: setup doctor synctest new budget say voice audio words compose stills render check cut transcribe silences scenes beats reference frames import look inspect cues score brand
 import { die, say, H } from "./lib/common.mjs";
 
 const [cmd, ...rest] = process.argv.slice(2);
@@ -22,9 +22,12 @@ Modes (project.json "mode"): narrated (voice sets the timing) · footage (your c
   audio <dir>               all modes: scene timing (timing.json/js) + music + effects + mix (-14 LUFS)
   words <dir>               narrated: estimated word times → transcript.json (captions, event cues)
   compose <dir>             fill timings into src/index.html → comp/ (+ lint); stills and render run it for you
-  stills <dir> [t1 t2 …] [--platform p]  frames → stills/sheet.jpg (+ safe-<platform>.jpg for 9:16): LOOK at them
+  cues <dir>                the cue sheet (project.json "cues") in time order: the page's CUE.x and the score's C["x"]; flags cues under 3 frames apart
+  score <dir>               film: the bundled starter score (a bed and a placeholder hit on every cue) → src/assets/score.wav
+  stills <dir> [t1 t2 …] [--cues] [--range a:b --every s] [--platform p]  frames → stills/sheet.jpg (+ safe-<platform>.jpg for 9:16): LOOK at them
+                            --cues: every cue at 4 frames before, on, 6 frames after (legend in stills/cues.txt); --range: a frame every s seconds (default 0.25)
   render <dir> [--draft]    MP4 → out/<name>-<aspect>.mp4 (+ -share.mp4 if over 25 MB); the old one moves to history/
-  check <dir>               automatic checks (format, frame rate, sound, sync, captions) → out/check.json + stills/final-sheet.jpg
+  check <dir>               automatic checks (format, frame rate, sound, sync, captions; sync of each cue marked "sync": true) → out/check.json + stills/final-sheet.jpg
  footage, music, reference
   import <dir> <video> [--aspect 9:16|16:9|1:1|4:5]  footage project from a finished video (default 9:16) → src/footage/ + stills/source-sheet.jpg
   cut <dir>                 project.json "edit.clips" → src/assets/base.mp4 + audio/voice.wav (+ cuts.json)
@@ -36,10 +39,13 @@ Modes (project.json "mode"): narrated (voice sets the timing) · footage (your c
   frames <video> [--n 12] [--out file]        contact sheet of any video, no project needed → one JPEG
  style
   look <dir> --from <images or videos…>       measure a reference → look-reference.json + src/look.css + stills/look-card.jpg
-  look <dir> --card paper|midnight|bold|luxe  the same card for a built in look → stills/look-card-<look>.jpg`;
+  look <dir> --card paper|midnight|bold|luxe  the same card for a built in look → stills/look-card-<look>.jpg
+  brand <dir> --brand "#hex" [--brand "#hex"] [images …]  how much of each still is in the brand colour: ACCENT, HEAVY or FLOODED (exit 2)
+  inspect <dir> [--from s] [--to s]           one picture of a stretch: frames, scenes, voice with the words heard,
+                                              music, effects and the finished level, warnings in red → stills/inspect.png`;
 
 const COMMANDS = ["setup", "doctor", "new", "budget", "say", "voice", "audio", "words", "compose", "stills", "render", "check",
-                  "cut", "transcribe", "silences", "scenes", "beats", "reference", "frames", "synctest", "import", "look"];
+                  "cut", "transcribe", "silences", "scenes", "beats", "reference", "frames", "synctest", "import", "look", "inspect", "cues", "score", "brand"];
 // setup and doctor report their own failures as messages; the other commands are loaded as they stand
 const lib = async (name, argv) => { try { return await (await import(`./lib/${name}.mjs`)).main(argv); } catch (err) { die(err.message); } };
 if (cmd === undefined || cmd === "help" || cmd === "--help" || cmd === "-h") say(HELP);

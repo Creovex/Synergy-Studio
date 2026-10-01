@@ -60,6 +60,8 @@ tagline competes, the audience's situation is recognisable, and it answers their
 ## 6. Restate before building
 Send a 4–6 line summary (message, audience, structure with timings, look, voice/music, CTA) and ask:
 "a) Build it  b) Show me stills first  c) Change something".
+For a story, film or mascot piece, the summary is the chosen beat sheet, and "stills first" is the
+recommended answer (SKILL.md §2, "Pitch cheap").
 
 ## 7. Brand voice from samples (when the user gives posts, captions or a website)
 Count, don't guess: typical sentence length (median) and the longest; words they repeat (use them);

@@ -11,6 +11,9 @@ These four are UI/motion-graphics looks. For drawn, textured, cinematic work (st
 mascots) use the sketch kit on a canvas instead (illustration.md), or design a look from the reference's style card.
 Helper classes: `.serif` (Cormorant Garamond), `.tracked` (spaced capitals in Jost). A look is a starting
 point: override variables for the brand (`#root{--accent:#1B6FE0}`) and keep `data-look` on the closest one.
+**Brand colours are an accent, not the whole look:** give each colour a role and reserve the signature hue for
+the logo and hero (brand-colours.md, `studio_reference` with `name: "brand-colours"`; the AllSpace "all blue" lesson);
+`studio_brand_check` measures how much of a still is in the brand hue.
 Brand colours: override variables in a `<style>` block (`#root{--accent:#1B6FE0}`) and use the brand's logo
 file (never redraw a logo). Two font families at most (Manrope for headlines, Inter for text are bundled;
 other fonts: the user gives `.woff2` files, you add them with `studio_file_add` into `src/assets/fonts/` and declare them with `@font-face`, open-licence fonts only; the tools download no fonts; styles.md shows how).

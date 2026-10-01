@@ -2,11 +2,14 @@
 
 Run through the CLI:  node scripts/studio.mjs voice <project> [--only s3,s5]
 Reads  <project>/project.json : voice, speed, lexicon, scenes[{id, say}]
-Writes <project>/audio/vo/<id>.wav (24 kHz mono, silence trimmed) and <project>/durations.json
+Writes <project>/audio/vo/<id>.wav (24 kHz mono, silence trimmed), <project>/durations.json and
+       <project>/audio/voice-report.json (spoken form, text the voice may misread, long pauses; speech.py)
 """
 import json, re, sys, pathlib
 import numpy as np, soundfile as sf
 from kokoro_onnx import Kokoro
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+from speech import normalise, risky, internal_pauses, PAUSE_LIMIT_S
 
 env = json.loads(pathlib.Path(sys.argv[1]).read_text())          # env.json written by setup
 proj = pathlib.Path(sys.argv[2])
@@ -52,7 +55,13 @@ durations = json.loads(dur_file.read_text()) if dur_file.exists() else {}
 def spoken(text):
     for word, say in lexicon.items():                               # brand names, acronyms
         text = re.sub(r"\b" + re.escape(word) + r"\b", say, text)
-    return text
+    return normalise(text)                                          # a.m., e.g., &, %: the form the voice reads well
+
+rep_file = proj / "audio" / "voice-report.json"
+try:
+    report = json.loads(rep_file.read_text()) if rep_file.exists() else {}
+except json.JSONDecodeError:
+    report = {}
 
 for sc in cfg["scenes"]:
     sid, say = sc["id"], (sc.get("say") or "").strip()
@@ -61,11 +70,14 @@ for sc in cfg["scenes"]:
     out = proj / "audio" / "vo" / f"{sid}.wav"
     if not say:                                                     # silent scene: uses "hold"
         durations[sid] = 0.0
+        report.pop(sid, None)
         if out.exists(): out.unlink()
         continue
     v_ = sc.get("voice", voice)                                  # a British voice (b…) needs the en-gb phonemes
     lang_ = "en-gb" if v_[:1] == "b" else "en-us"
-    audio, sr = k.create(spoken(say), voice=v_, speed=float(sc.get("speed", speed)), lang=lang_)
+    text_, changes = spoken(say)
+    warnings = risky(text_, lexicon)
+    audio, sr = k.create(text_, voice=v_, speed=float(sc.get("speed", speed)), lang=lang_)
     a = audio.astype("float32")
     idx = np.where(np.abs(a) > 0.01)[0]
     a = a[max(0, idx[0] - 600): idx[-1] + 2400] if len(idx) else a
@@ -74,6 +86,23 @@ for sc in cfg["scenes"]:
     words = len(say.split())
     wps = words / max(durations[sid], 0.1)
     print(f"{sid}: {durations[sid]:.2f} s, {words} words ({wps:.1f} words/s)" + (f"   [voice {v_}, {lang_}]" if v_ != voice else "") + ("   <- rushed: cut words (keep 2.5-3.3)" if wps > 3.5 else ""))
+    pauses = internal_pauses(a, sr)
+    for c in changes:
+        print(f"  {sid}: said as written for the voice: {c}")
+    for w_ in warnings:
+        print(f"  WARNING {sid}: {w_}")
+    for at, length in pauses:
+        print(f"  WARNING {sid}: a {length:.2f} s pause inside the line at {at:.2f} s (the voice's own sentence breaks are shorter than {PAUSE_LIMIT_S} s); listen with studio say and reword or split the line")
+    report[sid] = {"text": say, "spoken": text_, "changes": changes, "warnings": warnings, "pauses": [{"at": at, "length": ln} for at, ln in pauses]}
 
 dur_file.write_text(json.dumps(durations, indent=1))
+report = {k_: v for k_, v in report.items() if k_ in {sc["id"] for sc in cfg["scenes"]}}
+import os
+if os.environ.get("SS_TEST_ABORT_BEFORE_DONE"): os.abort()          # tests only: a crash before the run finished
+rep_file.write_text(json.dumps(report, indent=1))
 print("total narration", round(sum(durations.values()), 2), "s")
+# the last act: every file of this run is written. The voice engine can crash while Python shuts down (seen once in
+# about 58 runs: "recursive_mutex lock failed"); studio voice then accepts the run only when this file names it.
+(proj / "audio" / "voice-done.json").write_text(json.dumps({"run": os.environ.get("SS_VOICE_RUN", "")}))
+sys.stdout.flush()
+if os.environ.get("SS_TEST_ABORT_AFTER_DONE"): os.abort()           # tests only: the crash at exit

@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
-import { paths, home, JOB_RUNNER, UserError } from "./context.mjs";
+import { paths, home, JOB_RUNNER, UserError, log } from "./context.mjs";
 import { pidIsAlive } from "../skills/synergy-studio/scripts/lib/lock.mjs";
 import { imageContent } from "./images.mjs";
 
@@ -53,8 +53,16 @@ export function startJob(spec) {
   };
   fs.writeFileSync(jobFile(id), `${JSON.stringify(record, null, 2)}\n`);
   fs.writeFileSync(logFile(id), "");
-  const runner = spawn(process.execPath, [JOB_RUNNER, jobFile(id)], { detached: true, stdio: "ignore", shell: false, env: spec.env ?? process.env });
-  runner.on("error", () => {});
+  // the runner is plain Node code: it runs on the same Node as the job (never on the Claude app itself)
+  const runner = spawn(spec.node, [JOB_RUNNER, jobFile(id)], { detached: true, stdio: "ignore", shell: false, env: spec.env ?? process.env });
+  log(`job ${id} ${spec.label}: runner on ${spec.node}`);
+  runner.on("error", (error) => {
+    log(`job ${id} ${spec.label}: the runner could not start: ${error.message}`);
+    fs.appendFileSync(logFile(id), `the job runner could not start: ${error.message}\n`);
+  });
+  runner.on("exit", (code, signal) => {
+    if (code !== 0) log(`job ${id} ${spec.label}: runner exited with ${signal ?? `code ${code}`}`);
+  });
   runner.unref();
   return id;
 }
