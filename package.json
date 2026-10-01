@@ -1,5 +1,6 @@
 {
   "name": "synergy-studio",
+  "version": "0.2.0",
   "private": true,
   "description": "Synergy Studio: development tools only. The MCP server itself has no dependencies.",
   "license": "UNLICENSED",

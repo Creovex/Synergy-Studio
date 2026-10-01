@@ -15,3 +15,4 @@ Read `LITE.md` (the specification) before changing anything. `BUILD_LOG.md` is t
 - `reference/` and `ledger/` are never committed; neither are videos, renders, models or archives.
 - Each worker owns only its own files; no two workers edit the same file.
 - Commit format: `lite L<n>: <what changed>`, one commit per level.
+- Every release raises the version in `.claude-plugin/plugin.json`, `bundle/manifest.json`, `mcp/context.mjs` (`SERVER_VERSION`) and `package.json` together (`test/version.test.mjs` checks they agree): Claude Code only updates an installed plugin when the version changes.
