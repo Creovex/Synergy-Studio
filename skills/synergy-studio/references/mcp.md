@@ -24,6 +24,7 @@ that as the tool `studio_audio`: every command has a tool of the same name with 
 | bring the user's own logo, photo, clip, song or font in | `studio_file_add` |
 | plan the words, make the voice, build the timing and mix | `studio_budget`, `studio_say`, `studio_voice`, `studio_audio`, `studio_words` |
 | cut, transcribe and analyse footage | `studio_cut`, `studio_transcribe`, `studio_silences`, `studio_scenes`, `studio_beats` |
+| write music with real instruments, locked to the cues and scene events (genre, warm, premium, cinematic, comedy) | `src/score.json` (`studio_file_write`; how: `studio_reference` `music-for-picture` and `music-for-picture-score-format`), `studio_sounds`, `studio_score`, `studio_audio` |
 | write the cue sheet of a film, read it back, and make the starter score with a hit on every cue | project.json `cues` (`studio_file_write`), `studio_cues`, `studio_score` |
 | see every lint error, or look at the video before rendering (`cues: true` shoots every cue before, on and after; `range_from`, `range_to` and `every` shoot a whole shot) | `studio_compose`, `studio_stills` |
 | measure how much of a picture is in the brand colour (ACCENT, HEAVY or FLOODED) | `studio_brand_check` |
@@ -84,7 +85,8 @@ at most 1600 px wide and 1 MB) inside the result of the tool or job that made th
   `remove-background` may download a model the first time. Transcription for captions normally has its model from
   setup; if the download is blocked, `studio_transcribe` says what is missing, and you can import a `.srt` instead (an existing `.srt` on the Mac: `studio_file_add` with `from_path` (it lands in `src/assets/`, for example `src/assets/subs.srt`), then `studio_transcribe` with `file: "src/assets/subs.srt"`; captions you write yourself: `studio_file_write` of `subs.srt` at the project root, then `file: "subs.srt"`).
 - **No terminal.** Everything you would have run by hand is a tool. If an instruction cannot be done with a tool
-  (for example writing a custom music score), say so and offer the nearest thing: the starter score (`studio_score`, a hit on every cue), a generated bed or the user's track.
+  (for example running a script of your own), say so and offer the nearest thing a tool does. Custom music is a tool:
+  write `src/score.json` and call `studio_score`.
 
 ## Examples and templates
 `studio_example` reads a file of the skill's examples or templates: `path` is relative to the skill folder and only under

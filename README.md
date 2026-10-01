@@ -1,8 +1,8 @@
 # Synergy Studio lite
 
 A Claude plugin that makes and improves short videos in any visual style on a Mac. Claude writes each video as
-one HTML page animated with GSAP and rendered by HyperFrames, with a local voice (Kokoro), generated music and
-ffmpeg. An MCP server carries the skill and exposes the scripts as tools, so Claude Code and Claude Desktop both
+one HTML page animated with GSAP and rendered by HyperFrames, with a local voice (Kokoro), music (a generated bed,
+or a score Claude writes as data and the tools play on real sampled instruments, every hit on its frame) and ffmpeg. An MCP server carries the skill and exposes the scripts as tools, so Claude Code and Claude Desktop both
 see the instructions and can run the whole pipeline: new videos, footage edits with word captions, improving a
 finished MP4, looks taken from a reference, three.js scenes.
 
@@ -29,6 +29,7 @@ same install line. Remove it with `claude plugin uninstall synergy-studio@synerg
 Then, in any Claude Code session:
 - "Use Synergy Studio to create a new video about why you should drink water before coffee."
 - "Use Synergy Studio to improve this video: add word captions and an end card. /Users/you/Movies/clip.mp4"
+- "Use Synergy Studio to make a 20 second warm product video with Afrobeats music."
 
 The first time, Claude runs the one time setup (5 to 10 minutes) and then makes the video. The tools are named
 `mcp__plugin_synergy-studio_synergy-studio__studio_*`; in headless runs allow them with
@@ -48,7 +49,7 @@ on your Mac instead.
 
 ## Owner's test in Claude Desktop (T18)
 
-1. Build the bundle as in step 1 above and confirm the last lines say the unpacked server lists 40 tools.
+1. Build the bundle as in step 1 above and confirm the last lines say the unpacked server lists 41 tools.
 2. Install `dist/synergy-studio.mcpb` in Claude Desktop (Settings, Extensions, Advanced settings, Install Extension).
 3. Quit Claude Desktop completely and open it again, then start a new chat.
 4. Ask: "Use Synergy Studio to create a new 15 second 9:16 video about drinking water before coffee."

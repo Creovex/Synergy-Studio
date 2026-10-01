@@ -24,7 +24,7 @@ const EXPECTED_TOOLS = [
   "studio_guide", "studio_hyperframes", "studio_import_hyperframes", "studio_inspect", "studio_job_log", "studio_job_status",
   "studio_look_from", "studio_open", "studio_project_import", "studio_project_list", "studio_project_new",
   "studio_reference", "studio_reference_study", "studio_render", "studio_say", "studio_scenes", "studio_score", "studio_setup_start",
-  "studio_silences", "studio_stills", "studio_synctest", "studio_transcribe", "studio_voice", "studio_words",
+  "studio_silences", "studio_sounds", "studio_stills", "studio_synctest", "studio_transcribe", "studio_voice", "studio_words",
 ];
 
 const tmp = (label) => fs.mkdtempSync(path.join(os.tmpdir(), `ss-mcp-${label}-`));

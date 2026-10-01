@@ -530,3 +530,169 @@ Every test from T0 to T17 with T7s and T16b is PASS, except:
   prompt and job failures fixed in L11; the rebuilt bundle has not yet been through his test.
 Largest gap: the videos are judged by measurements and by a model reading stills, not by a person watching and
 listening; T18 is where James does that, and it has not finished.
+
+## L12 plan: precise music with real instruments (written before the build)
+
+**Found first.** The cue sheet (`cues`, `CUE` in the page), cue stills, per cue sync lines in `check`, the self correcting
+loudness loop and the typed cue warning already exist (L11). `studio score` runs only the bundled numpy starter
+(`template/score.py`): a pad and a placeholder hit per cue. The mix is built mono at 24 kHz, which loses everything above
+12 kHz. Setup installs Python packages from a hashed lock (`--require-hashes`); tinysoundfont declares `pyaudio`, which
+must stay out of it.
+
+**Files.**
+- `scripts/score_file.py` (new): validates `src/score.json`, solves the tempo from anchors (refused beyond `max_stretch`,
+  naming the tempo that would be needed), compiles grids, notes, chords, bends and hits to note events. No audio.
+- `scripts/instruments.py` (new): finds the SoundFont, checks every preset with `sfpreset_name`, renders the events with
+  tinysoundfont in chunks between event times (note offs before note ons), 2 s tail, synth gain -8 dB, per channel
+  `pitchbend_range`, a seeded noise convolution reverb (kick and bass dry), the report, and the preset listing.
+- `scripts/audio.py`: when `src/score.json` exists it renders the score with the timing it has just computed and mixes it
+  as a stem at 48 kHz stereo (ducked under the voice like the bed). A score replaces a generated bed (`warm`, `calm`,
+  `upbeat`); it layers on a song file (`music: {file}`), with a warning when it also has pitched tracks. Projects without
+  a score keep their exact bytes. `--timing-only` writes timing and stops (for `studio score`).
+- `scripts/lib/score.mjs`: with `src/score.json`, validates and renders it and prints the report; without it, the starter
+  as today. New `scripts/lib/sounds.mjs`: `studio sounds [--font f]` lists the installed font's presets and kits.
+- `scripts/lib/setup.mjs`, `paths.mjs`, `doctor.mjs`, `requirements.lock`: tinysoundfont 0.3.7 resolved with uv with
+  `pyaudio` excluded; MuseScore General Lite downloaded into `<home>/soundfonts/` with its SHA-256 pinned after the first
+  download; `setup --soundfont <file>`; one doctor line `instruments` (PASS or FAIL).
+- MCP: `studio_score` (new description, same input), `studio_sounds {font?}`; the music skill reachable through
+  `studio_reference` and resources. `skills/music-for-picture/` installed from the owner's repository, tool names adapted.
+- Text: `voice-and-audio.md` (engine choice and the score file), `commands.md`, `SKILL.md` build step, `mcp.md`, `NOTICE.md`,
+  `LITE.md` changes table.
+
+**project.json:** no change; the score is a file under `src/`, which Claude Desktop may write.
+
+**Anchor and hit names:** seconds, `cue:<name>`, `<scene>.<event>`, `<scene>.start`, `<scene>.end`; anything else is an
+error that lists the names that exist.
+
+**Tests (thresholds fixed here, before the first run).**
+1. Timing: a note at 2.000 s, first sample above -60 dBFS never before 2.000 s and within 5 ms for percussive presets;
+   16 kicks in a bar, offsets equal within 0.1 ms. Falsifier: a renderer stepping in fixed 512 sample blocks fails.
+2. Anchors: bar 1 at 0.5 s and bar 9 at 19.0 s at 104 BPM solve to 103.78 BPM (±0.01), bar 9 at 19.000 s ±1 sample.
+   Falsifier: anchors needing a 50% stretch are refused.
+3. Determinism: two renders byte identical. Falsifier: another seed differs.
+4. Validation: unknown drum, grid not 16 steps, unknown chord, unknown anchor name, missing preset, no SoundFont: each
+   refused with a message that names the fix.
+5. Integration through MCP calls: a 15 to 20 s film with an Afrobeats score, bar 5 anchored to a scene event, an
+   `impact` on another event; new, score, audio, stills, render, check; every check line PASS; the impact's onset in the
+   MP4 within 1 frame of its event (measured).
+6. Regression: the three examples and a film with the starter score give the same `timing.json`, `mix_raw.wav` and
+   `mix.wav` bytes as the code at 8b279e1, and still render and pass `check`.
+7. Loudness: a score of heavy hits renders at -14 ±1 LUFS with true peak <= -1 dBTP. If the limiter takes more than
+   6 dB, a master bus for scores is built and the test repeated.
+8. Claude with the plugin only: "a 20 s warm product video with Afrobeats music" should produce `src/score.json`;
+   "a 10 s calm background clip" may use the bed. Recorded as observed.
+
+## L12: precise music with real instruments
+
+Claude writes the music as data in `src/score.json` (the music-for-picture skill's score format); `studio_score` checks
+it, solves the tempo from its anchors and plays it on a General MIDI SoundFont with tinysoundfont 0.3.7 (MIT); `audio`
+mixes it at 48 kHz stereo through a gentle bus compressor, ducked under the voice, in place of a generated bed. The
+plan above was written before the build. Workers: A (Sonnet) setup, doctor and `studio sounds`; V (Sonnet, fresh,
+behaviour only) the verifier; a reviewer (Opus, read only). Everything else and every recheck: the orchestrator.
+
+**Changed files.** New: `skills/synergy-studio/scripts/score_file.py`, `scripts/instruments.py`, `scripts/lib/sounds.mjs`,
+`skills/music-for-picture/` (the owner's skill; six lines changed to name `studio_score`, `studio_sounds` and `studio_check`),
+`tests/test_score_file.py`, `tests/test_instruments.py`, `test/lib-soundfont.test.mjs`, `test/harness/l12-music-mcp.mjs`,
+`l12-loud-hits.mjs`, `l12-regression.sh`, `l12-fullpass.sh`, `tools-list.mjs`. Changed: `scripts/audio.py`, `lib/audio.mjs`,
+`lib/score.mjs`, `lib/master.mjs` (warning text), `lib/setup.mjs`, `lib/paths.mjs`, `lib/doctor.mjs`, `scripts/studio.mjs`,
+`requirements.lock`, `mcp/tools.mjs`, `mcp/content.mjs`, `SKILL.md`, `references/voice-and-audio.md`, `commands.md`, `mcp.md`,
+`README.md`, `NOTICE.md`, `LITE.md` (changes table), `test/mcp.test.mjs`, `test/lib-setup.test.mjs`, `test/lib-master.test.mjs`
+(the limiter warning now names `gain_db` in `src/score.json` instead of a script the tools cannot run), `test/harness/README.md`,
+and the version 0.3.0 in the four places.
+
+**Measured before building** (ledger/PLAN-music-L12.md): tinysoundfont installs from a wheel with `pyaudio` excluded; the
+mirror has `MuseScore_General.sf3` (39,900,972 bytes, MIT) and no file named `MuseScore_General_Lite.sf3` (the id
+`musescore-lite` is kept); both fonts hold all 128 programs and the 8 kits; `sfpreset_name` returns None for a missing
+preset; tinysoundfont's channel volume is cubic (CC7 64 gave -18.06 dB).
+
+**Results** (full pass ledger/evidence/L12-music-full-2026-09-30-2.txt, literal):
+```
+$ node --test test/*.test.mjs          ℹ tests 264  ℹ pass 264  ℹ fail 0
+$ pytest tests                         258 passed in 48.91s
+$ T0 (41 tools)                        87 items: 87 PASS, 0 FAIL      (falsifier `studio fly` fails, as required)
+fluidr3 kick: first sample above -60 dBFS +2.29 ms after 2.000 s
+musescore-lite piano: first sample above -60 dBFS +3.69 ms after 2.000 s
+fluidr3 orchestra hit: first sample above -60 dBFS +0.12 ms after 2.000 s
+fluidr3 timpani: first sample above -60 dBFS +4.00 ms after 2.000 s
+musescore-lite tr808 kick: first sample above -60 dBFS +1.58 ms after 2.000 s
+musescore-lite kick offsets in samples: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+512 block kick offsets in samples: [380, 113, 358, 91, 335, 68, 313, 46, 291, 536, 269, 514, 247, 492, 225, 470]
+512 block piano: +6.71 ms
+flute before 440.9 Hz, after the bend 220.5 Hz
+```
+| # | Test | Result | Literal evidence |
+|---|---|---|---|
+| 1 | Timing | PASS | every percussive preset on both fonts +0.12 to +4.00 ms, none early; 16 kicks offset 0 samples each (both fonts). Falsifier, a 512 sample block renderer: kicks spread 46 to 536 samples, piano +6.71 ms: fails both rules |
+| 2 | Anchors | PASS | `tempo 104 BPM asked, 103.7838 BPM solved`; bar 9 at 19.000000 s (+0.00 samples); a kick on bar 9 starts on that sample plus its 2.29 ms attack. Falsifier: 50% stretch refused, "need 156.00 BPM, +50.0% from bpm 104 (max_stretch allows 6%)" |
+| 3 | Determinism | PASS | two `audio` runs 4 s apart: `a20636d1dc549186 score-inst.wav, 487da56451ce1a58 mix_raw.wav, cd7f1a63d78d84f1 mix.wav` both times; seed 8: `2abeb5e4a20f23ae` (evidence/l12/bytes-identical.txt). The first build failed this twice in about 40 runs: libsndfile writes the clock time into a float WAV's PEAK chunk, so files written a second apart differed (found by verifier V); the WAVs are now written without it, with a test whose falsifier is libsndfile's own writer |
+| 4 | Validation | PASS | unknown drum (lists the 28), 15 step grid ("has 15 steps"), unknown chord (lists the qualities), unknown anchor name (lists every name), program 0 bank 5 ("is not in ... nothing is substituted"), a key outside an instrument's samples, no SoundFont ("run studio setup ... or studio setup --soundfont <that file>"), a score with no notes ("a silent score is never played"); every problem listed at once |
+| 5 | Film through MCP | PASS | 13 MCP calls; `bar 5 at 9.000000 s (+0.00 samples)` on `s2.drop`; every check line PASS (loudness -14.2, true peak -2.5, `sync logo: 16.50 s: audio +0.003 s`, audio against mix lag 0 ms); `impact: event s3.slam 14.400 s; in the MP4 the impact sits 1.98 ms from its scheduled place (match 0.917); ... first audible sample at 14.4022 s, 2.2 ms after the event`. Falsifier (impact written 3 frames late): `102.2 ms after the event`, FAIL |
+| 6 | No regressions | PASS | `29 SAME` (timing, mixes, reports, starter score.wav of the three examples and a starter score film, 8b279e1 against now); falsifier `FALSIFIER-OK hydration-tips with a score file: mix_raw.wav differs`. T5 all three examples render and pass check; T6 identical frames; T2, T4, T7s, T15, T17 PASS |
+| 7 | Loudness, heavy hits | PASS | 12 hits: `final loudness -14.1 LUFS, true peak -3 dBTP`, check loudness and true peak PASS |
+| 8 | Claude, plugin only | PASS, with my reply named | Sonnet, only this server's tools. "a 10 s calm background clip": `"music": "calm"`, no score, check all PASS. "a 20 s warm product video with Afrobeats music": it asked four intake questions (the skill's intake), proposing "a live-instrument Afrobeats score"; I answered "You choose: use your defaults." in the same session; it read music-for-picture and its score format and genres, wrote `src/score.json` (bar 9 anchored to `cue:logo`, stings on cues), called `studio_score`; `audio` replaced the bed; check all PASS with `sync drop +0.002`, `sync hero +0.003`, `sync logo +0.003 s` (evidence/l12/test8-claude.txt) |
+
+Render time for 30 s of music (639 notes, font load included, 3 runs): MuseScore General 1.32, 1.23, 1.22 s; FluidR3 0.25,
+0.24, 0.28 s. A 600 s score with 42,784 notes ran as a job and finished in 28 s (verifier V).
+
+**Setup** (worker A, rechecked): `requirements.lock` gains `tinysoundfont==0.3.7` with hashes and holds no pyaudio; setup
+step 6/11 downloads MuseScore General (sha256 5b85b6c2c61d…); a second setup says every step "already done"; doctor
+`PASS instruments: tinysoundfont 0.3.7, default font musescore-lite (MuseScore_General.sf3, sha256 matches); also installed:
+fluidr3`; falsifier: the font file renamed makes the line FAIL with the fix; `setup --soundfont /etc/hosts` is refused
+and copies nothing.
+
+**Master bus.** Built after measuring, compressor only. On the Afrobeats film the limiter took 6.9 dB; lowering the hits
+3, 6 or 9 dB left it at 6.1, 6.0 and 6.4 dB (the dry groove itself is peaky, crest 17.6 dB). With a 3:1 bus compressor
+(at most 6 dB) on the score: crest 15.2 dB, limiter 2.8 dB, loudness -14.1 LUFS (before -14.0). The leveler was skipped:
+loudness already reaches -14 without it, and it would lift a quiet intro the composer wrote on purpose.
+
+**Review and verifier.** The reviewer found 2 high, 5 medium and 9 low defects; all fixed with tests (the two high ones
+proven on the old code: notes past the end leaked into the next pass, first 10 ms peak 0.15617 against 0.02860; a key
+doubled at one instant stuck, 0.036099 against 0). Verifier V (117 tool calls, behaviour only) passed precision, anchor
+names, validation, mixing rules, no score projects, fonts, MCP, loudness and sync, odd meters, swing, gain and reverb,
+and found eight defects, all fixed with tests: `"length"` was unbounded (600 s on a 40 s video wrote 231 MB; now cut to
+the video); a bend never reset (now it holds until the next note: 524.0 Hz after a -12 bend on C5); keys outside an
+instrument's samples rendered silence (now refused by name); MuseScore's piano peaks about 38 dB under its bass and
+`gain_db` could not raise it (now -40 to +24 dB, exact, and the report lists each track's peak and flags a track over
+30 dB under the loudest); the PEAK chunk above; a traceback for a narrated project before `voice` (now "Run studio voice
+first"); unclear messages (bad grid character, bad bank, two anchors on one bar, a hit before 0 s, a hidden kit error,
+repeated lines).
+
+**Section 5 suggestions.**
+**The owner's section 5 suggestions, checked against this copy:**
+| Suggestion | Status | Reason and evidence |
+|---|---|---|
+| A cue sheet | Already present (L11) | `cues` in absolute seconds, `CUE.name` in the page, `studio_cues`. The score now names times as `cue:<name>`, `<scene>.<event>`, `<scene>.start` and `<scene>.end`, so a hit inside a scene uses either form. Test 5 anchored bar 5 to `s2.drop` and placed a sting on `cue:logo`. |
+| Stills at cues | Already present (L11) | `stills --cues` (4 frames before, on, 6 after, with a legend) and `--range a:b --every s`. Test 5 ran `studio_stills` with `cues: true`. |
+| A per cue sync check | Already present (L11) | `check` prints `sync <cue>` from the sharp onset nearest the cue, within ±1.5 frames. Test 5: `sync logo: 16.50 s: audio +0.008 s`. The music test also measures its impact with a matched filter, because a "strongest rise" rule read the groove's rim 54 ms early. |
+| Loudness with peaky scores | Already present (L11) | Gain search through the 4x limiter, measured until within 0.3 LU, with a warning above 6 dB. Test 7, 12 heavy hits: render -14.1 LUFS, -3.0 dBTP. |
+| A master bus for scores | Built, compressor only | Measured on the Afrobeats film: the limiter took 6.9 dB, and lowering the hits by 3, 6 or 9 dB left it at 6.1, 6.0 and 6.4 dB, because the dry groove itself is peaky (crest 17.6 dB). A 3:1 bus compressor (at most 6 dB) on the score stem gives crest 15.2 dB and limiter 2.8 dB at the same loudness (-14.0 against -14.1 LUFS). The leveler was skipped: loudness already reaches -14 without it, and it would lift a quiet intro the composer wrote on purpose. |
+| A lint warning for typed cue times | Already present (L11) | compose warns about a number in the page equal to a cue time (named gap kept: whole numbers). |
+| Creative rules from a director review | Already present (L11) | want and villain (SKILL.md, storytelling.md), comedy timing and the rule of three (character.md), energy plan (cinema.md, shots.md), staging (cinema.md §7), pitch cheap with beat sheets and rough stills (SKILL.md), KEEP, CUT and WHY (feedback.md), the gag check at setup, action and reaction (review.md). |
+| brand-colour-roles | Already present (L11) | references/brand-colours.md and `studio_brand_check` (all blue 97% FLOODED, blue mascot on cream 1% ACCENT). |
+
+**Named gaps.** Nobody has listened to a score: timing, levels and spectra are measured, musical quality is not (James's
+ears, T18). MuseScore General's piano is quiet and not monotonic in velocity (vel 30 -43.8, 60 -38.4, 90 -52.7, 127 -29.0
+dBFS, verifier V): the report flags it, the font is not changed. The limiter can still take over 6 dB on a sparse score
+with one big hit (V measured 7.9 dB; the warning names `gain_db`). Pan is not hard on stereo samples. GeneralUser GS is
+untested. A fresh home whose SoundFont download fails (the WARN path) was not run. `studio_setup_start` with an unknown
+font id says the file does not exist instead of listing the ids. In test 8 the Afrobeats run needed one reply from me
+after its intake questions. Claude Desktop with the new bundle is James's test (T18).
+
+**Awkward in the code, and what I would change.**
+- `audio.py` is one long top level script: timing cannot be computed without running it (`--score-only` was added). I
+  would move timing into a function that both `audio` and `score` call.
+- The mix is built mono at 24 kHz; projects with a score now upsample it to 48 kHz stereo, projects without keep the old
+  path for identical bytes. I would build everything at 48 kHz stereo in one release and accept new bytes once.
+- LITE.md does not record the L11 additions (cues, inspect, brand, open); its changes table now records L12.
+- `test/lib-setup.test.mjs` "doctor exits 2 when a check fails" can run a real synctest that rewrites the real env.json
+  (worker A); it should give its fake env a stored synctest.
+- uv splits the `--excludes` path at spaces, so setup passes a bare file name from the home's tmp folder.
+
+## Final report (updated after L12)
+
+The per test table of the first final report stands with the L11 updates. L12 adds music with real instruments: tests 1
+to 8 of the L12 plan PASS with the evidence above (test 8 with my one reply after the intake questions, named). The
+full pass on the final code: node 264 of 264, pytest 258, T0 87 of 87 with 41 tools, T2, T4, T5, T6, T7s, T15 and T17
+PASS. Still open: T13, BLOCKED after three rounds (awaiting James's written acceptance or a fourth round); T18, PENDING
+(James installs `dist/synergy-studio.mcpb`, now with the music tools, in Claude Desktop and reports). Largest gap:
+nobody has listened to the music; it is measured for timing, level and balance, not judged by ear.

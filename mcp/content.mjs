@@ -5,6 +5,12 @@ import path from "node:path";
 import { SKILL_DIR, UserError } from "./context.mjs";
 
 const REF_DIR = path.join(SKILL_DIR, "references");
+// The music-for-picture skill ships beside this one; its files are references here, named with the skill's name.
+const MUSIC_DIR = path.join(SKILL_DIR, "..", "music-for-picture");
+const MUSIC_REFS = { "music-for-picture": "SKILL.md", "music-for-picture-score-format": "references/score-format.md",
+  "music-for-picture-genres": "references/genres.md", "music-for-picture-action-sounds": "references/action-sounds.md",
+  "music-for-picture-gm-map": "references/gm-map.md" };
+const refFile = (name) => (MUSIC_REFS[name] ? path.join(MUSIC_DIR, MUSIC_REFS[name]) : path.join(REF_DIR, `${name}.md`));
 const EXAMPLES_DIR = path.join(SKILL_DIR, "examples");
 const FOLDER_WORDS = /<this skill folder>|<skill folder>|<skill>/g;
 
@@ -15,11 +21,11 @@ export function resolvedSkill() {
 }
 
 export function referenceNames() {
+  let own = [];
   try {
-    return fs.readdirSync(REF_DIR).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3)).sort();
-  } catch {
-    return [];
-  }
+    own = fs.readdirSync(REF_DIR).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3));
+  } catch { /* no references folder */ }
+  return [...own, ...Object.keys(MUSIC_REFS).filter((n) => fs.existsSync(refFile(n)))].sort();
 }
 
 export function readReference(name) {
@@ -27,7 +33,7 @@ export function readReference(name) {
   if (!referenceNames().includes(clean)) {
     throw new UserError(`There is no reference named ${JSON.stringify(name)}. Available: ${referenceNames().join(", ")}.`);
   }
-  return fs.readFileSync(path.join(REF_DIR, `${clean}.md`), "utf8").replace(FOLDER_WORDS, SKILL_DIR);
+  return fs.readFileSync(refFile(clean), "utf8").replace(FOLDER_WORDS, SKILL_DIR);
 }
 
 export function exampleNames() {
@@ -50,7 +56,7 @@ export function guideAppendix() {
     "Wherever the guide says `studio <command>`, call the tool of the same name instead of running a command line:",
     "studio setup = studio_setup_start; studio doctor = studio_doctor; studio new = studio_project_new; studio import = studio_project_import;",
     "studio reference = studio_reference_study; studio frames = studio_frames; studio look = studio_look_from; every other command has the tool studio_<command>",
-    "(budget, say, voice, audio, words, compose, stills, render, check, cut, transcribe, silences, scenes, beats, synctest). Every option of a command is an input of its tool with the same name.",
+    "(budget, say, voice, audio, words, compose, cues, score, sounds, stills, render, check, cut, transcribe, silences, scenes, beats, synctest). Every option of a command is an input of its tool with the same name.",
     "The project folder is always given as `name` (lower case letters, digits and hyphens, at most 40 characters); the files inside it are read and written with studio_file_list, studio_file_read, studio_file_write and studio_file_add.",
     "Long work (setup, voice, transcribe, look, stills, render, check, synctest) returns a job_id: call studio_job_status with wait_sec 25 until it is done. Pictures (contact sheets, stills, look cards) come back as images in the result: look at them.",
     "Plain HyperFrames folders: studio_import_hyperframes, then studio_hyperframes (lint, render, snapshot and the other allowed commands), then studio_check.",
@@ -65,7 +71,7 @@ export function guideAppendix() {
 // the title of a reference (its first "# " heading), which says what it is for; read from the file so it never goes stale
 export function referenceTitle(name) {
   try {
-    const line = fs.readFileSync(path.join(REF_DIR, `${name}.md`), "utf8").split("\n").find((l) => l.startsWith("# "));
+    const line = fs.readFileSync(refFile(name), "utf8").split("\n").find((l) => l.startsWith("# "));
     return line ? line.slice(2).trim() : name;
   } catch {
     return name;

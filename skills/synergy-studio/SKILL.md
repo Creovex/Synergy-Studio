@@ -85,6 +85,10 @@ Narrated video (the kind of the AllSpace reels, LSPedia, the Synergy Studio expl
    `music` (`upbeat` for social energy, `warm` for friendly explainers, `calm` for serious or premium,
    `none`, or the user's song), `speed` (0.95 default; 0.85–0.9 for a calm premium read, up to 1.05 for energy),
    `lexicon` (brand pronunciations), `platform` (tiktok · reels · meta · shorts · youtube · linkedin · x · website).
+   **Music with real instruments:** for a genre (Afrobeats, amapiano, hip-hop, lo-fi), warm, premium, cinematic or comedy
+   work, write the music as `src/score.json` (the music-for-picture skill; `studio_reference` with
+   `music-for-picture`, then `music-for-picture-score-format`), check it with `studio_score`, and `studio_audio` mixes it
+   in place of the bed. A generated bed is fine for quick background; the user's track always wins (voice-and-audio.md).
    **Length budget:** call `studio_budget` before writing the narration: it prints how many words fit
    per scene for the target length (total = narration + pauses: lead, pre and post per scene, tail).
    `studio_audio` prints the real split and warns when over `length`. Brand names: `studio_say` with `text: "HAURA"`
@@ -131,10 +135,11 @@ and the rendered snippets in references/styles.md) and `SS.start({cuts: "hard"})
 **One cue sheet, then block before you draw.** Write every hit (a slam, a knock, a word landing) once, in
 project.json `"cues"` (`studio_file_write`), and read it everywhere: `CUE.slam` in the page, the same time in the
 sound, `"sync": true` on clean hits so `studio_check` measures their sync. `studio_cues` prints the sheet in time
-order. `studio_score` writes `src/assets/score.wav` from the bundled starter score (a soft bed and a placeholder
-hit on every cue) and sets `music` to it; then call `studio_audio`. You cannot write or run a score script of your own through the tools, so in
-Claude Desktop the real music is the user's licensed track (`studio_file_add`) or the starter's placeholder hits: say so
-plainly, and use a generated bed (`warm`, `calm` or `upbeat`) only when it suits the act (voice-and-audio.md).
+order. Then the music: write `src/score.json` with its bars and hits anchored to the cues (the music-for-picture
+skill) and call `studio_score`, which checks it, renders it on real instruments and reports where every anchor and hit
+landed; or use the user's licensed track. Without a score file, `studio_score` writes the bundled starter score (a soft
+bed and a placeholder hit on every cue) to `src/assets/score.wav`, which is enough to check timing. Then call
+`studio_audio` (voice-and-audio.md).
 Then block the film with plain shapes at the real positions and the real camera, call `studio_stills` with
 `cues: true` (every cue 4 frames before, on the cue and 6 frames after, with a legend) and fix timing and
 staging (cinema.md §7) before any detail. Layout fixes on grey shapes are cheap; on a finished drawing they cost a

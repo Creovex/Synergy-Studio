@@ -6,6 +6,8 @@
 //   USAGE, main(argv)              the command
 //   runDoctor({home, full, log})   runs the checks, prints the lines, returns the exit code (setup calls this)
 //   synctestIsCurrent(env, home)   whether env.synctest matches the installed HyperFrames and browser versions
+//   instrumentsResult({version, reg, state})  the "instruments" line from the tinysoundfont version ("" or null when it
+//                                  does not import), the fonts.json record and the default font's fontState
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,7 +16,10 @@ import { MIN_FREE_BYTES, freeDiskBytes, isInside, toolHome } from "./paths.mjs";
 import { loadEnv, toolEnv } from "./env.mjs";
 import { run, runHyperframes, runPython, sha256File } from "./run.mjs";
 import { withHeavyLock } from "./lock.mjs";
-import { MODELS, NPM_PACKAGES, PINS, WHISPER, WHISPER_MODEL, WHISPER_MODEL_FIX, binaryArch, readWhisperInfo } from "./setup.mjs";
+import {
+  MODELS, NPM_PACKAGES, PINS, SOUNDFONT_FIX, TINYSOUNDFONT_VERSION, WHISPER, WHISPER_MODEL, WHISPER_MODEL_FIX,
+  binaryArch, fontState, readFonts, readWhisperInfo,
+} from "./setup.mjs";
 
 export const USAGE = "doctor [--full]  checks the installation; --full also test renders a 60 fps page and a three.js page";
 
@@ -76,6 +81,30 @@ async function modelCheck(env) {
   }
   if (problems.length) return FAIL("model hashes", problems.join("; "), `${SETUP_AGAIN} (it downloads the file again)`);
   return PASS("model hashes", files.join(", "));
+}
+
+// The pure part of the instruments check (see the export list).
+export function instrumentsResult({ version, reg, state, importError = "it does not import" }) {
+  const check = "instruments";
+  if (!version) return FAIL(check, `tinysoundfont is not usable (${importError})`, SETUP_AGAIN);
+  if (version !== TINYSOUNDFONT_VERSION) return FAIL(check, `found tinysoundfont ${version}, expected ${TINYSOUNDFONT_VERSION}`, SETUP_AGAIN);
+  const ids = Object.keys(reg.fonts);
+  if (!ids.length || !reg.default) return FAIL(check, "no SoundFont is installed", SOUNDFONT_FIX);
+  if (!state?.ok) return FAIL(check, `the default font ${reg.default} cannot be used (${state?.reason ?? "it is not listed in fonts.json"})`, SOUNDFONT_FIX);
+  const others = ids.filter((id) => id !== reg.default && fs.existsSync(path.join(path.dirname(state.file), reg.fonts[id].file ?? "")));
+  const also = others.length ? `; also installed: ${others.join(", ")}` : "";
+  return PASS(check, `tinysoundfont ${version}, default font ${reg.default} (${reg.fonts[reg.default].file}, sha256 matches)${also}`);
+}
+
+// Quick: one Python start and one hash of the default font file; the font is never loaded.
+async function instrumentsCheck(env) {
+  if (!fs.existsSync(env.python)) return FAIL("instruments", `the Python environment is missing at ${env.python}`, SETUP_AGAIN);
+  const code = "import importlib.metadata as m, tinysoundfont; print(m.version('tinysoundfont'))";
+  const r = await runPython(env, ["-c", code], { timeoutMs: 120000 });
+  const version = r.code === 0 ? firstLine(r.stdout) : null;
+  const reg = readFonts(env.home);
+  const state = version && reg.default ? await fontState(env.home, reg, reg.default) : null;
+  return instrumentsResult({ version, reg, state, importError: lastLines(r, 1) });
 }
 
 async function architectureCheck(env) {
@@ -270,6 +299,7 @@ export async function runDoctor({ home = toolHome(), full = false, log = console
   emit(await safely("uv", () => versionCheck("uv", env.uv, ["--version"], te, PINS.uv, (t) => firstLine(t).split(" ")[1])));
   emit(await safely("python and kokoro", () => pythonCheck(env)));
   emit(await safely("model hashes", () => modelCheck(env)));
+  emit(await safely("instruments", () => instrumentsCheck(env)));
   emit(await safely("ffmpeg", () => versionCheck("ffmpeg", env.ffmpeg, ["-version"], te, null, bannerVersion)));
   emit(await safely("ffprobe", () => versionCheck("ffprobe", env.ffprobe, ["-version"], te, null, bannerVersion)));
   emit(await safely("binary architecture", () => architectureCheck(env)));

@@ -7,6 +7,7 @@ import { cueRows, videoLength, outsideProblems } from "./cues.mjs";
 export const USAGE = "score <dir>";
 
 export const SCORE_FILE = "src/assets/score.wav";
+export const SCORE_JSON = "src/score.json";
 export const SCORE_MUSIC = { file: SCORE_FILE, start: 0, gain_db: 0 };
 
 // project.json "music" after a score run. kind "set": the score is now the music (a mood such as "warm", "none" or nothing before);
@@ -16,6 +17,15 @@ export function musicAfterScore(proj) {
   if (m && typeof m === "object" && !Array.isArray(m) && typeof m.file === "string")
     return { music: m, kind: path.posix.normalize(m.file.replace(/\\/g, "/")) === SCORE_FILE ? "score" : "user" };
   return { music: { ...SCORE_MUSIC }, kind: "set" };
+}
+
+// With src/score.json (music written as data, references/score-format.md of the music-for-picture skill): checks it, solves the
+// tempo from its anchors, renders it on real instruments and prints the report. audio.py does the work with the project's own
+// timing (--score-only stops after the score), so studio audio later plays exactly what this printed.
+function scoreFile(dir, d) {
+  const e = env();
+  run(e.python, [path.join(SKILL, "scripts", "audio.py"), d, e.ffmpeg, path.join(e.home, "soundfonts"), "--score-only"]);
+  say(`the score is checked and rendered. Listen to audio/score-inst.wav if you can, then run studio audio ${dir}: it mixes the score with the voice and effects.`);
 }
 
 // Runs the BUNDLED starter score (template/score.py) on the project's cue sheet: a soft bed and a placeholder hit on every
@@ -39,6 +49,8 @@ function score(dir) {
 
 export async function main(argv) {
   const { pos } = parseArgs(argv);
-  score(pos[0]);
+  const d = projDir(pos[0]);
+  if (fs.existsSync(path.join(d, SCORE_JSON))) scoreFile(pos[0], d);
+  else score(pos[0]);
   return 0;
 }

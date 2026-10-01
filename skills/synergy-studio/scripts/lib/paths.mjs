@@ -71,7 +71,7 @@ export function venvPython(home) {
 //   whisperModel (ggml-small.en.bin in the HyperFrames cache),
 //   nodeModules, hyperframesMjs, hfHome (the folder HyperFrames sees as its home: its browser, config and
 //   model caches live there), venv, python, models, modelFile, voicesFile, bin, ffmpeg, ffprobe,
-//   cmake (in the venv), whisperDir, whisperBin (whisper-cli), whisperInfo (build record), envJson, jobs, locks, heavyLock, serverLog, tmp
+//   soundfonts (the General MIDI SoundFonts), fontsJson (soundfonts/fonts.json: the default font and each font file with its sha256), cmake (in the venv), whisperDir, whisperBin (whisper-cli), whisperInfo (build record), envJson, jobs, locks, heavyLock, serverLog, tmp
 export function layout(home) {
   const win = process.platform === "win32";
   const nodeDir = path.join(home, "runtime", "node");
@@ -79,6 +79,7 @@ export function layout(home) {
   const nodeProject = path.join(home, "node");
   const models = path.join(home, "models");
   const bin = path.join(home, "bin");
+  const soundfonts = path.join(home, "soundfonts");
   return {
     home,
     runtime: path.join(home, "runtime"),
@@ -99,6 +100,8 @@ export function layout(home) {
     models,
     modelFile: path.join(models, "kokoro-v1.0.int8.onnx"),
     voicesFile: path.join(models, "voices-v1.0.bin"),
+    soundfonts,
+    fontsJson: path.join(soundfonts, "fonts.json"),
     bin,
     ffmpeg: path.join(bin, exeName("ffmpeg")),
     ffprobe: path.join(bin, exeName("ffprobe")),

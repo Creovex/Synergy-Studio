@@ -70,7 +70,7 @@ export function masterGain(e, file, limit, { trim = "", log = () => {} } = {}) {
   const reduction = limiterReduction(src.TP, found.gain, limit);
   const reachable = Math.abs(found.I - LUFS_TARGET) <= REACH_TOLERANCE;
   if (reachable && reduction > REDUCTION_WARN_DB)
-    log(`  ! the limiter takes ${reduction.toFixed(1)} dB off the peaks: the mix is peaky and will sound squashed. A less peaky track or softer hits fix it (in Claude Code, the master bus in scripts/score.py can also be compressed).`);
+    log(`  ! the limiter takes ${reduction.toFixed(1)} dB off the peaks: the mix is peaky and will sound squashed. A less peaky track or softer hits fix it (in src/score.json, a lower "gain_db" on the hits or the drums).`);
   if (reachable && Math.abs(found.I - LUFS_TARGET) > LUFS_TOLERANCE)
     log(`  ! the loudness search stopped at ${found.I} LUFS (target ${LUFS_TARGET}, ${found.steps} tries): the peaks are being limited hard.`);
   return { silent: false, reachable, ...found, reduction };

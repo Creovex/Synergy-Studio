@@ -43,7 +43,7 @@ function audio(dir) {
   const e = env(), d = projDir(dir), raw = path.join(d, "audio", "mix_raw.wav"), mix = path.join(d, "audio", "mix.wav");
   fs.rmSync(mix, { force: true });                           // a failed run must not leave an older mix for render to pick up
   const bad = audioProblem(readProject(d), d); if (bad) die(bad);
-  run(e.python, [path.join(SKILL, "scripts", "audio.py"), d, e.ffmpeg]);
+  run(e.python, [path.join(SKILL, "scripts", "audio.py"), d, e.ffmpeg, path.join(e.home, "soundfonts")]);   // src/score.json, if any, is played here
   const m = masterGain(e, raw, MIX_LIMIT, { log: say });
   if (m.silent) {                                            // nothing to measure: written as it is, with no gain
     run(e.ffmpeg, ["-loglevel", "error", "-y", "-i", raw, "-ar", "48000", mix]);

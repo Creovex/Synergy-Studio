@@ -20,7 +20,7 @@ const ASPECTS = ["16:9", "9:16", "1:1", "4:5"];
 const MODES = ["narrated", "footage", "film"];
 const VOICES = ["af_heart", "af_bella", "af_nova", "af_sky", "am_michael", "am_adam", "bf_emma", "bf_isabella", "bm_george", "bm_lewis"];
 const CLI_TOOL = { brand: "studio_brand_check", setup: "studio_setup_start", doctor: "studio_doctor", new: "studio_project_new", import: "studio_project_import", reference: "studio_reference_study", frames: "studio_frames", look: "studio_look_from" };
-const CLI_COMMANDS = new Set(["setup", "doctor", "new", "budget", "say", "voice", "audio", "words", "compose", "stills", "render", "check", "cut", "transcribe", "silences", "scenes", "beats", "reference", "frames", "synctest", "import", "look", "inspect", "cues", "score", "brand"]);
+const CLI_COMMANDS = new Set(["setup", "doctor", "new", "budget", "say", "voice", "audio", "words", "compose", "stills", "render", "check", "cut", "transcribe", "silences", "scenes", "beats", "reference", "frames", "synctest", "import", "look", "inspect", "cues", "score", "sounds", "brand"]);
 
 // ---------------------------------------------------------------- results
 const text = (value, extra = {}) => ({ content: [{ type: "text", text: value }], ...extra });
@@ -180,14 +180,18 @@ define(
 
 define(
   "studio_setup_start",
-  "Installs everything Synergy Studio needs on this computer (render engine, voice, ffmpeg, about 1 GB, 5 to 10 minutes) as a job. Use it when studio_doctor says the tools are not set up.",
-  { whisper_model: { type: "string", description: "Optional full path of a Whisper model file (ggml-small.en.bin) downloaded elsewhere, to place it without downloading." } },
+  "Installs everything Synergy Studio needs on this computer (render engine, voice, instruments, ffmpeg, about 1 GB, 5 to 10 minutes) as a job. Use it when studio_doctor says the tools are not set up, or with soundfont to add a SoundFont.",
+  {
+    whisper_model: { type: "string", description: "Optional full path of a Whisper model file (ggml-small.en.bin) downloaded elsewhere, to place it without downloading." },
+    soundfont: { type: "string", description: "Optional: fluidr3 or musescore-lite to download that SoundFont, or the full path of a .sf2 or .sf3 General MIDI SoundFont on this computer to install it." },
+  },
   [],
   ann(false, false, true, true),
-  async ({ whisper_model }) => {
+  async ({ whisper_model, soundfont }) => {
     const model = whisper_model === undefined ? undefined : userFile(whisper_model, "The Whisper model file");
+    const font = soundfont === undefined || ["musescore-lite", "fluidr3", "generaluser-gs"].includes(soundfont) ? soundfont : userFile(soundfont, "The SoundFont file");
     // The runtime Node is not installed yet, so setup runs with the Node that runs this server.
-    return studioJob({ label: "setup", args: ["setup", ...flagArgs([["whisper-model", model]])], node: studioNode(null) });
+    return studioJob({ label: "setup", args: ["setup", ...flagArgs([["whisper-model", model], ["soundfont", font]])], node: studioNode(null) });
   },
   { title: "Set up the tools" },
 );
@@ -590,7 +594,7 @@ define(
 
 define(
   "studio_score",
-  "Writes src/assets/score.wav from the bundled starter score, a soft bed with a placeholder hit on every cue of project.json \"cues\", and sets \"music\" to it unless the project already plays a song of the user. Use it for a film before blocking the page; replace it with the user's licensed track when there is one. It never runs code from the project.",
+  "Checks and renders src/score.json, music you write as data (drum grids, notes, chords and hits at bar:beat positions, bars anchored to cues and scene events) on real sampled instruments, and returns the report: solved tempo, anchor and hit times, note count, peak. Use it after writing or changing src/score.json (music-for-picture skill, studio_reference music-for-picture-score-format), before studio_audio, which mixes it. Without src/score.json it writes the bundled starter score (a soft bed and a placeholder hit per cue) to src/assets/score.wav and sets \"music\" to it. It never runs code from the project.",
   { name: nameProp },
   ["name"],
   WRITE_GENERATED,
@@ -598,7 +602,17 @@ define(
     const dir = existingProject(name);
     return studioSync({ label: "score", args: ["score", dir], project: dir, signal: ctx.signal });
   },
-  { needsHome: true, title: "Write the starter score" },
+  { needsHome: true, title: "Render the score" },
+);
+
+define(
+  "studio_sounds",
+  "Lists the General MIDI programs and drum kits of the installed SoundFont (or of font, when given). Use it to check a program number or kit before writing it in src/score.json; studio_score refuses a preset the font does not have.",
+  { font: { type: "string", description: "An installed font id such as musescore-lite or fluidr3; the default font when left out." } },
+  [],
+  READ,
+  async ({ font }, ctx) => studioSync({ label: "sounds", args: ["sounds", ...flagArgs([["font", font]])], signal: ctx.signal }),
+  { needsHome: true, title: "List instruments and kits" },
 );
 
 define(

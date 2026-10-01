@@ -142,14 +142,14 @@ test("masterGain: a track the limiter keeps far from -14 is not reachable and lo
   assert.deepEqual(said, []);
 });
 
-test("the limiter warning names what the user can change and treats scripts/score.py as a Claude Code option", { skip: skipReal }, () => {
+test("the limiter warning names what the user can change: the track, softer hits, gain_db in src/score.json; never a script", { skip: skipReal }, () => {
   const said = [];
   masterGain(ENV, wav(12, clicks(-30)), 0.83, { log: (line) => said.push(line) });
   const line = said.join("\n");
   assert.match(line, /less peaky track/);
   assert.match(line, /softer hits/);
-  assert.match(line, /in Claude Code, .*scripts\/score\.py/);
-  assert.doesNotMatch(line, /template\/score\.py/);
+  assert.match(line, /src\/score\.json, a lower "gain_db"/);   // the score file is what Claude can change through the tools (L12)
+  assert.doesNotMatch(line, /score\.py/);
 });
 
 // ---------------------------------------------------------------- the audio and render commands on those sources

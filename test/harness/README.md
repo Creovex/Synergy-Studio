@@ -19,6 +19,11 @@ directory (set `HARNESS_TMP` to change it) and are deleted, except with `--keep`
 | `t4-word-timing.mjs` | T4 | `[--keep]` | 20 fixed words, 19 fixed gaps (`t4-scorer.mjs`), Kokoro af_heart speed 1.0; median onset error at most 80 ms, 95th percentile (nearest rank) at most 200 ms, a missing word is infinite error. Falsifier: evenly spaced timings must fail. PENDING (exit 3) if transcription is unavailable |
 | `t6-determinism.mjs` | T6 | `[--sketch] [--hydration] [--keep]` | decoded frames at 1 s, the middle and TOTAL minus 1 s identical for two renders of the sketch page (`fixtures/sketch-page.html`, rng 1) and of hydration-tips; falsifier: rng 2 differs at one frame or more |
 | `t0-contract.mjs` | T0 | `[skill-folder] [--repo dir] [--run] [--tools file] [--falsifier]` | every command, flag, written file, `SS.start()` helper and sketch kit name in the text exists in the code; `--tools` checks `studio_*` names against a tools/list JSON; `--falsifier` adds "run `studio fly <dir>`" and requires the failure |
+| `l12-music-mcp.mjs` | L12 test 5 | `[project-name] [font-id] [late]` | an 18 s Afrobeats film built through MCP calls only (bar 5 anchored to `s2.drop`, an impact on `s3.slam`, a sting on a sync cue): every `check` line PASS, and the impact found in the MP4 by a matched filter within one frame of its event, never early. Falsifier: `late` writes the impact 3 frames late and must FAIL |
+| `l12-loud-hits.mjs` | L12 test 7 | `[folder] [font-id]` | a 20 s score with 12 heavy hits: `check` loudness -14 ±1 LUFS and true peak at most -1 dBTP |
+| `l12-regression.sh` | L12 test 6 | none | the three examples and a starter score film give the same `timing.json`, `mix_raw.wav`, `mix.wav`, reports and `score.wav` bytes with the code at 8b279e1 and now. Falsifier: hydration-tips with a score file must differ |
+| `l12-fullpass.sh` | L12 full pass | `<evidence-file>` | runs the gate's automated tests and the L12 tests into one evidence file |
+| `tools-list.mjs` | T0 helper | `<out.json>` | writes the server's `tools/list` answer for `t0-contract.mjs --tools` |
 
 Support files: `lib.mjs`, `captions-lib.mjs`, `audio-lib.mjs`, `t0-parse.mjs` (extraction rules), `t4_synth.py`.
 `test/harness.test.mjs` checks the scorers and parsers on synthetic data (`node --test test/harness.test.mjs`).

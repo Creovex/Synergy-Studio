@@ -50,7 +50,7 @@ test("layout keeps every path inside the home and uses platform names", async ()
   const { layout, venvPython, exeName } = await lib("paths.mjs");
   const home = path.join(os.tmpdir(), "a home with spaces");
   const L = layout(home);
-  for (const key of ["nodeBin", "npmCli", "uvBin", "python", "hyperframesMjs", "ffmpeg", "ffprobe", "modelFile", "voicesFile", "heavyLock", "envJson", "hfHome"]) {
+  for (const key of ["nodeBin", "npmCli", "uvBin", "python", "hyperframesMjs", "ffmpeg", "ffprobe", "modelFile", "voicesFile", "heavyLock", "envJson", "hfHome", "soundfonts", "fontsJson"]) {
     assert.ok(L[key].startsWith(home), `${key} is inside the home`);
   }
   assert.equal(L.python, venvPython(home));
@@ -58,6 +58,8 @@ test("layout keeps every path inside the home and uses platform names", async ()
   assert.equal(path.basename(L.ffprobe), exeName("ffprobe"));
   assert.equal(path.basename(L.heavyLock), "heavy.lock");
   assert.equal(path.dirname(L.heavyLock), path.join(home, "locks"));
+  assert.equal(L.soundfonts, path.join(home, "soundfonts"));
+  assert.equal(L.fontsJson, path.join(home, "soundfonts", "fonts.json"));
 });
 
 test("free disk is a positive number for an existing folder and for a folder that does not exist yet", async () => {
@@ -295,7 +297,9 @@ test("pins: every platform has a 64 hex checksum, models have sizes, the lock ho
   assert.deepEqual(setup.MODELS.map((m) => m.size), [92361271, 28214398]);
   for (const m of setup.MODELS) assert.match(m.sha256, /^[0-9a-f]{64}$/, m.name);
   const lock = fs.readFileSync(path.join(SCRIPTS, "requirements.lock"), "utf8");
-  for (const pin of ["kokoro-onnx==0.6.1", "soundfile==0.14.0", "imageio-ffmpeg==0.6.0", "pillow==12.3.0"]) assert.ok(lock.includes(pin), pin);
+  for (const pin of ["kokoro-onnx==0.6.1", "soundfile==0.14.0", "imageio-ffmpeg==0.6.0", "pillow==12.3.0", "tinysoundfont==0.3.7"]) assert.ok(lock.includes(pin), pin);
+  assert.ok(setup.PY_REQUIREMENTS.includes("tinysoundfont==0.3.7"));
+  assert.equal(/pyaudio/i.test(lock.replace(/^#.*$/gm, "")), false, "pyaudio (live playback, needs PortAudio) is excluded from the lock");
 });
 
 test("binaryArch accepts the running node and rejects a text file", { skip: process.platform === "win32" }, async () => {

@@ -18,6 +18,14 @@ in `lexicon`.
 - Kokoro is English-first. For Nigerian Pidgin or other accents there is no matching voice: write those
   lines as on-screen text, or use the user's own recorded voice (footage mode).
 
+## Music: choose the engine first
+Say which you chose and why in one line.
+| The video | Music |
+|---|---|
+| quick background: a utility clip, a draft, a calm 10 s loop | a generated bed: `warm`, `calm` or `upbeat` |
+| a genre (Afrobeats, amapiano, highlife, hip-hop, trap, lo-fi, R&B, house), warm, premium, documentary, cinematic or comedy work | the score file with real instruments (below) |
+| the user gave a track | their file; a score file may add timed hits on top, never a second melody |
+
 ## Music (`"music"` in project.json)
 - Generated (licence-free, made by `studio_audio`): `warm` (96 BPM, pad + pluck), `calm` (72 BPM), `upbeat` (118 BPM), `none`.
 - The user's own song: `{"file": "src/assets/song.mp3", "start": 47.3, "gain_db": -3}` plays from 47.3 s, ducked
@@ -25,15 +33,43 @@ in `lexicon`.
   Commercial songs can be muted in TikTok/Instagram paid promotion; say so to the user.
 - Music always dips under the voice automatically (about 8 dB).
 
+## The score file (`src/score.json`): real instruments, locked to the picture
+Write the music as data and the tools play it on sampled instruments (a General MIDI SoundFont), so every hit lands on
+its frame and a rebuild gives the same bytes. How to compose it is the **music-for-picture** skill: read it with
+`studio_reference` (`music-for-picture`, then `music-for-picture-score-format` for the file,
+`music-for-picture-genres` for 13 genre recipes, `music-for-picture-action-sounds`, `music-for-picture-gm-map`).
+- **Check it:** `studio_score` validates the file, solves the tempo from the anchors, renders it and reports the
+  solved tempo, the time of bar 1, every anchor against its target (in samples), every hit, each track's peak, the note
+  count and the raw peak. A refused file lists every problem with its fix; fix the file, never the audio. Read the
+  report every time: a track more than 30 dB under the loudest is flagged as buried (fonts play some instruments far
+  quieter than others; raise its `gain_db`). A key outside an instrument's samples would be silent, so it is refused.
+- **Mix it:** `studio_audio` renders it again with the project's timing and mixes it at 48 kHz stereo. It replaces a
+  generated bed; on a song file it plays on top and warns when it has notes (two pieces of music fight). Under a
+  voice it ducks like the bed and sits 10 dB under the voice while it speaks.
+- **Times in this tool** (the `at` of anchors and hits): seconds; `cue:<name>` (project.json `cues`); `<scene>.<event>`
+  (project.json `events`, counted from the scene's narration start, or the scene start without a voice);
+  `<scene>.start` and `<scene>.end`. An unknown name is refused with the list of names that exist.
+- **Fields beyond the format:** `"seed"` (a whole number, default 1; another seed changes the humanising, never the
+  times); `"reverb"`: `room` (default, 0.8 s), `hall` (2 s, cinematic) or `none` (kicks and basses always stay dry);
+  per track `"gain_db"` (-40 to +24, exact), `"pan"` (-1 left to 1 right; a stereo sample keeps some width), `"bank"`,
+  `"bend_range"` (1 to 24 semitones) and `"bends": [["4:1", -12, "1/2"]]` (glide to 12 semitones down over a half note;
+  slides and the trombone "wah-wah"; a bend holds only until the next note of the track, which starts at normal pitch);
+  hits `impact`, `sting` and `roll` (a timpani roll for one second ending on the hit), with `"pitch"` (default `C4`),
+  `"offset"` (seconds) and `"gain_db"`. Meters are beats over 4; a grid has 4 steps per beat (16 in 4/4).
+- **Sounds:** `"font"` is `musescore-lite` (installed by setup) or `fluidr3` when installed (`studio_setup_start` with
+  `soundfont: "fluidr3"`); `studio_sounds` lists the programs and kits of a font. A program the font lacks is refused, never
+  replaced. Without a SoundFont, `studio_score` stops and names the fix; it never plays silence.
+- **What it cannot do:** synth layers (noise risers, vinyl crackle, a sine drop) are not part of the score file; the
+  generated whoosh, pop and click come from `events` and cue `sfx`. The music ends with the video: `"length"` longer
+  than the video is cut to it, and notes after the end are cut (the report counts them).
+
 ## Wordless films and scores
 `"mode": "film"`: no voice at all; scenes are `{"id", "start", "end"}` in seconds and `events` place the
-sound effects. For music, use the user's licensed track (add it with `studio_file_add`, then
-`"music": {"file": "src/assets/song.mp3", "start": 0}`), one of the generated beds, or the starter score.
-**The starter score.** Write every hit (a slam, a knock, a word landing) once in project.json `cues`, then call
-`studio_score`: it writes `src/assets/score.wav` with a soft bed and a short placeholder hit on every cue, at the
-cue's time, and sets `"music"` to that file (a song of the user is left as it is). Then call `studio_audio`. The hits are placeholders that let you check timing and sync before the real music exists. You cannot write or run a score script of your own through the tools, so in
-Claude Desktop the real score is the user's licensed track or the starter's hits: say so plainly, and when the
-story needs more than hits, ask the user for a track or a composer's file.
+sound effects. For music, write a score file anchored to the cues, use the user's licensed track (add it with
+`studio_file_add`, then `"music": {"file": "src/assets/song.mp3", "start": 0}`), or one of the generated beds.
+**The starter score.** Without `src/score.json`, `studio_score` writes `src/assets/score.wav`: a soft bed and a short
+placeholder hit on every cue, at the cue's time, and sets `"music"` to that file (a song of the user is left as it
+is). The hits are placeholders that let you check timing and sync before the real music exists.
 Whichever you use, match the feeling to the act: plucks for curiosity, low rumble and thunder for fear, sparse
 piano with rain for loneliness, a shimmer for wonder, a groove for joy, a warm chord to end. A generated bed is one
 mood for the whole film: choose the one that fits the longest act (`calm` for lonely and wondering, `upbeat` for

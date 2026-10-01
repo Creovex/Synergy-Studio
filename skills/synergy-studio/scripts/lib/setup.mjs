@@ -10,6 +10,14 @@
 //   NPM_PACKAGES               exact npm package versions
 //   PY_REQUIREMENTS            the Python packages that requirements.lock is resolved from
 //   MODELS                     the Kokoro files: name, url, size, sha256
+//   TINYSOUNDFONT_VERSION      the pinned tinysoundfont (it plays scores through a SoundFont)
+//   SOUNDFONTS                 the General MIDI SoundFonts setup knows (id, file, url, size, sha256, licence)
+//   SOUNDFONT_FIX              what to do when no SoundFont is installed
+//   readFonts(home), writeFonts(home, reg), addFont(reg, id, entry), fontIdFor({sha256, fileName}), slugify(name), listedFonts(reg)
+//   fontState(home, reg, id)   {ok, file, reason}: whether a listed font file exists and matches its sha256
+//   installSoundfont(home, env, spec)  installs a known id or a .sf2/.sf3 file and records it in fonts.json
+//   parseArgs(argv)            the setup options
+//                              the soundfonts/fonts.json record: read, add (the first font becomes the default), name an id
 //   WHISPER, CMAKE_VERSION     the whisper.cpp source pin (tag, tarball url, sha256) and the cmake pin
 //   readWhisperInfo(home)      the build record of whisper-cli ({tag, sha256, cmake, metal}) or null
 //   binaryArch(file)           {ok, detail}: whether an executable is built for this machine
@@ -25,7 +33,7 @@ import { saveEnv, loadEnv, toolEnv } from "./env.mjs";
 import { run, runHyperframes, runPython, download, sha256File } from "./run.mjs";
 import { withHeavyLock } from "./lock.mjs";
 
-export const USAGE = "setup [--whisper-model f]  installs the tools (about 1.5 GB, once); run it again to repair; --whisper-model copies a downloaded Whisper model file into place";
+export const USAGE = "setup [--whisper-model f] [--soundfont id|file]  installs the tools (about 1.5 GB, once); run it again to repair; --whisper-model copies a downloaded Whisper model file into place; --soundfont installs a General MIDI SoundFont (musescore-lite, fluidr3, or a .sf2/.sf3 file)";
 
 const SCRIPTS_DIR = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const LOCK_FILE = path.join(SCRIPTS_DIR, "requirements.lock");
@@ -66,9 +74,13 @@ export const NPM_PACKAGES = {
   "@fontsource/jost": "5.3.0",
 };
 
+export const TINYSOUNDFONT_VERSION = "0.3.7";
 export const PY_REQUIREMENTS = [
-  "kokoro-onnx==0.6.1", "soundfile==0.14.0", "imageio-ffmpeg==0.6.0", "numpy", "pillow==12.3.0", "cmake==4.4.3",
+  "kokoro-onnx==0.6.1", "soundfile==0.14.0", "imageio-ffmpeg==0.6.0", "numpy", "pillow==12.3.0", "cmake==4.4.3", `tinysoundfont==${TINYSOUNDFONT_VERSION}`,
 ];
+// tinysoundfont declares pyaudio, which only live playback needs and which cannot be built without PortAudio. It is
+// never installed: uv is given this file as --excludes both when resolving requirements.lock and when installing it.
+const EXCLUDED_PACKAGES = ["pyaudio"];
 // cmake comes from PyPI into the venv; it builds whisper.cpp with the system compiler.
 export const CMAKE_VERSION = "4.4.3";
 
@@ -96,8 +108,30 @@ export const MODELS = [
   { name: "voices-v1.0.bin", key: "voicesFile", url: `${MODEL_BASE}voices-v1.0.bin`, size: 28214398, sha256: "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d" },
 ];
 
+// The General MIDI SoundFonts. musescore-lite is the default setup downloads (the mirror has no file called
+// MuseScore_General_Lite.sf3; the id keeps the name the music skill uses). fluidr3 is installed only on request, out of an
+// archive. generaluser-gs is never downloaded by setup: it is installed from a file the user gives.
+const SOUNDFONT_MIRROR = "https://ftp.osuosl.org/pub/musescore/soundfont/";
+export const DEFAULT_SOUNDFONT = "musescore-lite";
+export const SOUNDFONTS = {
+  "musescore-lite": {
+    file: "MuseScore_General.sf3", url: `${SOUNDFONT_MIRROR}MuseScore_General/MuseScore_General.sf3`,
+    size: 39900972, sha256: "5b85b6c2c61d10b2b91cddd41efcce7b25cd31c8271d511c73afafbef20b6fa3", licence: "MIT",
+  },
+  fluidr3: {
+    file: "FluidR3_GM2-2.sf2", size: 148345256, sha256: "2ae766ab5c5deb6f7fffacd6316ec9f3699998cce821df3163e7b10a78a64066", licence: "MIT",
+    archive: {
+      file: "fluid-soundfont.tar.gz", url: `${SOUNDFONT_MIRROR}fluid-soundfont.tar.gz`, size: 130294103,
+      sha256: "c815769e44d86f1507b946a6c48c997c7f650699aea1ec4b11ba66e3415c26b9", member: "FluidR3 GM2-2.SF2",
+    },
+  },
+  "generaluser-gs": { file: null, fromFileOnly: true },
+};
+export const SOUNDFONT_FIX = `run setup --soundfont ${DEFAULT_SOUNDFONT} (it downloads ${SOUNDFONTS[DEFAULT_SOUNDFONT].url}, about 40 MB), or download a General MIDI SoundFont (.sf2 or .sf3) on any machine and run: setup --soundfont <that file>. Without it, a score file cannot be played`;
+
 const say = (text) => console.log(text);
 const GB = 1024 ** 3;
+const SOUNDFONT_EXTENSIONS = /\.sf[23]$/i;
 // No installer step may run longer than this; a hung child is stopped and setup can be run again.
 const STEP_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -187,14 +221,15 @@ async function commandLine(bin, args, env) {
   return r.code === 0 ? r.stdout.trim() : null;
 }
 
+const tarEnv = () => ({ ...process.env, PATH: process.platform === "win32" ? process.env.PATH : "/usr/bin:/bin:/usr/sbin:/sbin" });
+
 async function extractArchive(archive, target, strip) {
   const staging = `${target}.part`;
   fs.rmSync(staging, { recursive: true, force: true });
   fs.mkdirSync(staging, { recursive: true });
   const args = ["-xf", archive, "-C", staging];
   if (strip) args.push(`--strip-components=${strip}`);
-  const env = { ...process.env, PATH: process.platform === "win32" ? process.env.PATH : "/usr/bin:/bin:/usr/sbin:/sbin" };
-  await failIfBad(await run(systemTool("/usr/bin/tar", "tar.exe"), args, { env }), "Unpacking the archive");
+  await failIfBad(await run(systemTool("/usr/bin/tar", "tar.exe"), args, { env: tarEnv() }), "Unpacking the archive");
   fs.rmSync(target, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.renameSync(staging, target);
@@ -290,7 +325,7 @@ function lockCovers() {
   return PY_REQUIREMENTS.filter((r) => r.includes("==")).every((r) => text.includes(`${r.toLowerCase()}`));
 }
 
-const IMPORT_CHECK = "import sys, kokoro_onnx, soundfile, numpy, PIL, imageio_ffmpeg; print('%d.%d.%d' % sys.version_info[:3])";
+const IMPORT_CHECK = "import sys, kokoro_onnx, soundfile, numpy, PIL, imageio_ffmpeg, tinysoundfont; print('%d.%d.%d' % sys.version_info[:3])";
 
 async function pythonVersion(env) {
   if (!fs.existsSync(env.python)) return null;
@@ -300,6 +335,15 @@ async function pythonVersion(env) {
 
 const stampFile = (L) => path.join(L.venv, "requirements.lock.sha256");
 
+// The requirements file that uv's --excludes reads: packages that must not be resolved or installed. uv splits the
+// value of --excludes at spaces, so uv runs with L.tmp as its working folder and gets the bare file name.
+const EXCLUDES_FILE = "excludes.txt";
+function writeExcludes(L) {
+  fs.mkdirSync(L.tmp, { recursive: true });
+  fs.writeFileSync(path.join(L.tmp, EXCLUDES_FILE), `${EXCLUDED_PACKAGES.join("\n")}\n`);
+  return EXCLUDES_FILE;
+}
+
 async function resolveLock({ L, env }) {
   say("   resolving the Python packages into requirements.lock");
   const input = path.join(L.tmp, "requirements.in");
@@ -308,8 +352,8 @@ async function resolveLock({ L, env }) {
   const out = path.join(L.tmp, "requirements.lock.new");
   // uv keeps the versions already recorded in an existing output file, so relocking only adds what is new.
   if (fs.existsSync(LOCK_FILE)) fs.copyFileSync(LOCK_FILE, out);
-  const args = ["pip", "compile", input, "--universal", "--python-version", PINS.python, "--generate-hashes", "--no-annotate", "--no-header", "--output-file", out];
-  await failIfBad(await run(L.uvBin, args, { env: uvEnv(env, L) }), "Resolving the Python packages");
+  const args = ["pip", "compile", input, "--universal", "--python-version", PINS.python, "--generate-hashes", "--no-annotate", "--no-header", "--excludes", writeExcludes(L), "--output-file", out];
+  await failIfBad(await run(L.uvBin, args, { env: uvEnv(env, L), cwd: L.tmp }), "Resolving the Python packages");
   const header = `# Resolved together by setup with uv ${PINS.uv} for Python ${PINS.python} from: ${PY_REQUIREMENTS.join(" ")}\n`;
   fs.writeFileSync(LOCK_FILE, header + fs.readFileSync(out, "utf8"));
   fs.rmSync(out, { force: true });
@@ -331,8 +375,8 @@ const stepVenv = {
     say("   creating the Python environment (uv fetches its own Python)");
     const venvArgs = ["venv", "--python", PINS.python, "--python-preference", "only-managed", "--clear", L.venv];
     await failIfBad(await run(L.uvBin, venvArgs, { env: ue, echo: true, timeoutMs: STEP_TIMEOUT_MS }), "Creating the Python environment");
-    const install = ["pip", "install", "--python", L.python, "--require-hashes", "-r", LOCK_FILE];
-    await failIfBad(await run(L.uvBin, install, { env: ue, echo: true, timeoutMs: STEP_TIMEOUT_MS }), "Installing the Python packages");
+    const install = ["pip", "install", "--python", L.python, "--require-hashes", "--excludes", writeExcludes(L), "-r", LOCK_FILE];
+    await failIfBad(await run(L.uvBin, install, { env: ue, cwd: L.tmp, echo: true, timeoutMs: STEP_TIMEOUT_MS }), "Installing the Python packages");
     const version = await pythonVersion(env);
     if (!version) throw new Error("The Python packages do not import. Run setup again.");
     fs.writeFileSync(stampFile(L), `${lockHash()}\n`);
@@ -357,6 +401,185 @@ const stepModels = {
         size: model.size, sha256: model.sha256 ?? undefined, log: say, onProgress: progressPrinter(model.name),
       });
       say(`   ${model.name} sha256 ${got.sha256}${model.sha256 ? "" : " (not pinned yet: record it in MODELS in setup.mjs)"}`);
+    }
+  },
+};
+
+// ---------------------------------------------------------------- SoundFonts
+
+// soundfonts/fonts.json: {"default": id, "fonts": {id: {"file", "sha256", "source"}}}. instruments.py reads it too.
+export function readFonts(home) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(layout(home).fontsJson, "utf8"));
+    const fonts = raw && typeof raw.fonts === "object" && raw.fonts !== null && !Array.isArray(raw.fonts) ? raw.fonts : {};
+    return { default: typeof raw?.default === "string" ? raw.default : null, fonts };
+  } catch {
+    return { default: null, fonts: {} };
+  }
+}
+
+// A new record with the font added. The default stays when it names a listed font; the first font becomes the default.
+export function addFont(reg, id, entry, { asDefault = false } = {}) {
+  const fonts = { ...reg.fonts, [id]: entry };
+  const keep = !asDefault && reg.default !== null && Object.hasOwn(reg.fonts, reg.default);
+  return { default: keep ? reg.default : id, fonts };
+}
+
+export function writeFonts(home, reg) {
+  const L = layout(home);
+  fs.mkdirSync(L.soundfonts, { recursive: true });
+  const part = `${L.fontsJson}.part`;
+  fs.writeFileSync(part, `${JSON.stringify({ default: reg.default, fonts: reg.fonts }, null, 2)}\n`);
+  fs.renameSync(part, L.fontsJson);
+}
+
+export function listedFonts(reg) {
+  return Object.keys(reg.fonts).map((id) => (id === reg.default ? `${id} (default)` : id)).join(", ") || "none";
+}
+
+// A slug of a file name: lower case letters, digits and hyphens.
+export function slugify(fileName) {
+  const slug = String(fileName).replace(/\.sf[23]$/i, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || "soundfont";
+}
+
+// The id of a font file: the known id whose sha256 matches, else generaluser-gs for a GeneralUser file, else a slug of its name.
+export function fontIdFor({ sha256, fileName }) {
+  const known = Object.entries(SOUNDFONTS).find(([, font]) => font.sha256 && font.sha256 === sha256);
+  if (known) return known[0];
+  if (/generaluser/i.test(fileName)) return "generaluser-gs";
+  const slug = slugify(fileName);
+  return SOUNDFONTS[slug] ? `${slug}-file` : slug;     // a different file named like a downloadable font never takes its id
+}
+
+// Whether the font `id` listed in fonts.json is usable: its file exists with the right size (known ids) and the sha256
+// that fonts.json records (for a known id also the pinned one). Reads the whole file once, never loads it as a SoundFont.
+export async function fontState(home, reg, id) {
+  const entry = reg.fonts[id];
+  if (!entry || typeof entry.file !== "string") return { ok: false, reason: `fonts.json has no file for ${id}` };
+  const file = path.join(layout(home).soundfonts, entry.file);
+  if (!fs.existsSync(file)) return { ok: false, file, reason: `${entry.file} is missing from ${path.dirname(file)}` };
+  const known = SOUNDFONTS[id];
+  if (known?.size && fs.statSync(file).size !== known.size) return { ok: false, file, reason: `${entry.file} has the wrong size` };
+  const sha256 = await sha256File(file);
+  if (sha256 !== entry.sha256 || (known?.sha256 && sha256 !== known.sha256)) {
+    return { ok: false, file, sha256, reason: `${entry.file} sha256 differs from fonts.json` };
+  }
+  return { ok: true, file, sha256 };
+}
+
+const isDownloadable = (id) => Object.hasOwn(SOUNDFONTS, id) && !SOUNDFONTS[id].fromFileOnly;
+
+// Downloads a known font into soundfonts/ (the archive for fluidr3: only its one member is unpacked and checked).
+async function downloadFont(L, id) {
+  const font = SOUNDFONTS[id];
+  const dest = path.join(L.soundfonts, font.file);
+  fs.mkdirSync(L.soundfonts, { recursive: true });
+  if (!font.archive) {
+    await download(font.url, dest, { size: font.size, sha256: font.sha256, log: say, onProgress: progressPrinter(font.file) });
+    return { file: font.file, sha256: font.sha256, source: font.url };
+  }
+  const source = font.archive.url;
+  if (await modelOk(dest, font)) return { file: font.file, sha256: font.sha256, source };
+  const work = path.join(L.tmp, "soundfont");
+  try {
+    const archive = path.join(work, font.archive.file);
+    await download(source, archive, { size: font.archive.size, sha256: font.archive.sha256, log: say, onProgress: progressPrinter(font.archive.file) });
+    const staging = path.join(work, "unpacked");
+    fs.rmSync(staging, { recursive: true, force: true });
+    fs.mkdirSync(staging, { recursive: true });
+    const args = ["-xf", archive, "-C", staging, font.archive.member];
+    await failIfBad(await run(systemTool("/usr/bin/tar", "tar.exe"), args, { env: tarEnv() }), `Unpacking ${font.archive.member}`);
+    const member = path.join(staging, font.archive.member);
+    if (!(await modelOk(member, font))) throw new Error(`${font.archive.member} from the archive has the wrong size or checksum; run setup --soundfont ${id} again`);
+    fs.copyFileSync(member, `${dest}.part`);
+    if (process.platform !== "win32") fs.chmodSync(`${dest}.part`, 0o644);
+    fs.renameSync(`${dest}.part`, dest);
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+  return { file: font.file, sha256: font.sha256, source };
+}
+
+// Asks the venv Python whether tinysoundfont loads the file. Throws the ERROR line of instruments.py when it does not.
+async function checkFontFile(env, file) {
+  if (!fs.existsSync(env.python)) throw new Error(`the Python environment is missing (${env.python}); run setup first`);
+  const r = await runPython(env, [path.join(SCRIPTS_DIR, "instruments.py"), "check", file], { timeoutMs: 120000 });
+  if (r.code === 0) return r.stdout.trim().split("\n").pop();
+  const text = `${r.stderr}\n${r.stdout}`.trim().split("\n").filter(Boolean);
+  const line = (text.reverse().find((l) => l.startsWith("ERROR")) ?? text[0] ?? `instruments.py exited with ${r.code}`).replace(/^ERROR: /, "");
+  const repair = /No module named/.test(line) ? ". Run setup (without --soundfont) to repair the Python packages first" : "";
+  throw new Error(`${line}${repair}. ${path.basename(file)} was not copied`);
+}
+
+// A SoundFont file the user gives: it must load (instruments.py check) and be named .sf2 or .sf3. Nothing is copied here.
+async function inspectFontFile(env, source) {
+  const file = path.resolve(source);
+  const fileName = path.basename(file);
+  const found = await checkFontFile(env, file);
+  if (!SOUNDFONT_EXTENSIONS.test(fileName)) throw new Error(`${fileName} loads but is not named .sf2 or .sf3; rename it, then run setup --soundfont again`);
+  return { file, fileName, found, sha256: await sha256File(file) };
+}
+
+// Copies it into soundfonts/ through a .part file, never overwriting a different file of that name.
+async function placeFontFile(L, font) {
+  const dest = path.join(L.soundfonts, font.fileName);
+  fs.mkdirSync(L.soundfonts, { recursive: true });
+  if (fs.existsSync(dest)) {
+    if ((await sha256File(dest)) !== font.sha256) throw new Error(`${dest} already exists and is a different file; rename your file or remove that one first`);
+    return;
+  }
+  fs.copyFileSync(font.file, `${dest}.part`);
+  fs.renameSync(`${dest}.part`, dest);
+}
+
+// Installs a SoundFont (a known id, or a .sf2/.sf3 file) and records it in fonts.json. Resolves to {id, entry, reg}.
+export async function installSoundfont(home, env, spec, { asDefault = false } = {}) {
+  const L = layout(home);
+  const before = readFonts(home);
+  let id = spec;
+  let entry;
+  if (isDownloadable(spec)) {
+    entry = await downloadFont(L, spec);
+  } else if (fs.existsSync(spec) && fs.statSync(spec).isFile()) {
+    const font = await inspectFontFile(env, spec);
+    id = fontIdFor({ sha256: font.sha256, fileName: font.fileName });
+    const listed = before.fonts[id];
+    if (listed && listed.sha256 !== font.sha256 && listed.file !== font.fileName) {
+      throw new Error(`the id ${id} already names ${listed.file}; ${font.fileName} was not copied. Rename it to give it another id`);
+    }
+    const sameAsListed = listed && listed.sha256 === font.sha256 && fs.existsSync(path.join(L.soundfonts, listed.file));
+    if (!sameAsListed) await placeFontFile(L, font);
+    say(`   ${font.fileName} loads (${font.found})`);
+    entry = sameAsListed ? listed : { file: font.fileName, sha256: font.sha256, source: font.file };
+  } else if (Object.hasOwn(SOUNDFONTS, spec)) {
+    throw new Error(`${spec} is not downloaded by setup; give the file: setup --soundfont <the .sf2 or .sf3 file>`);
+  } else {
+    throw new Error(`"${spec}" is not a SoundFont id (${Object.keys(SOUNDFONTS).join(", ")}) and not a file. Usage: setup --soundfont <id|file>`);
+  }
+  const reg = addFont(before, id, { file: entry.file, sha256: entry.sha256, source: entry.source }, { asDefault });
+  writeFonts(home, reg);
+  return { id, entry, reg };
+}
+
+// Not fatal: only playing a score needs a font, so a failure prints a WARN and setup goes on.
+const stepSoundfont = {
+  name: "SoundFont (General MIDI instruments for scores)",
+  async done({ L, options }) {
+    const reg = readFonts(L.home);
+    if (!reg.default || (options.soundfont && !Object.hasOwn(reg.fonts, options.soundfont))) return false;
+    return (await fontState(L.home, reg, reg.default)).ok;
+  },
+  async run({ L, env, options }) {
+    const reg = readFonts(L.home);
+    const unusable = reg.default !== null && !(await fontState(L.home, reg, reg.default)).ok;
+    const spec = options.soundfont ?? (unusable && isDownloadable(reg.default) ? reg.default : DEFAULT_SOUNDFONT);
+    try {
+      const got = await installSoundfont(L.home, env, spec, { asDefault: !options.soundfont && unusable && spec !== reg.default });
+      say(`   ${got.id}: ${got.entry.file} installed (sha256 ${got.entry.sha256.slice(0, 12)})`);
+    } catch (error) {
+      if (options.soundfont) throw error;
+      say(`   WARN the SoundFont is not installed (${error.message}). Fix: ${SOUNDFONT_FIX}. Setup continues.`);
     }
   },
 };
@@ -599,19 +822,22 @@ const stepEnvJson = {
   },
 };
 
-const STEPS = [stepNode, stepUv, stepNpm, stepVenv, stepModels, stepBinaries, stepWhisper, stepWhisperModel, stepBrowser, stepEnvJson];
+const STEPS = [stepNode, stepUv, stepNpm, stepVenv, stepModels, stepSoundfont, stepBinaries, stepWhisper, stepWhisperModel, stepBrowser, stepEnvJson];
 
 // ---------------------------------------------------------------- command
 
-function parseArgs(argv) {
-  const options = { relock: false, whisperModel: null };
+export function parseArgs(argv) {
+  const options = { relock: false, whisperModel: null, soundfont: null };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--relock") options.relock = true;
     else if (arg === "--whisper-model") {
       options.whisperModel = argv[++i] ?? null;
       if (!options.whisperModel || options.whisperModel.startsWith("--")) throw new Error("--whisper-model needs the model file. Usage: setup [--whisper-model <file>]");
-    } else throw new Error(`setup does not know "${arg}". Usage: setup [--relock] [--whisper-model <file>]`);
+    } else if (arg === "--soundfont") {
+      options.soundfont = argv[++i] ?? null;
+      if (!options.soundfont || options.soundfont.startsWith("--")) throw new Error("--soundfont needs a SoundFont id or file. Usage: setup [--soundfont <musescore-lite|fluidr3|file.sf2|file.sf3>]");
+    } else throw new Error(`setup does not know "${arg}". Usage: setup [--relock] [--whisper-model <file>] [--soundfont <id|file>]`);
   }
   return options;
 }
@@ -651,9 +877,16 @@ export async function main(argv) {
   const options = parseArgs(argv);
   const home = toolHome();
   say(`Tool home: ${home}`);
-  if (options.whisperModel && isSetUp(home)) {
-    await installWhisperModel(options.whisperModel, layout(home).whisperModel);
-    say(`Whisper model installed: ${layout(home).whisperModel}`);
+  if ((options.whisperModel || options.soundfont) && isSetUp(home)) {
+    if (options.whisperModel) {
+      await installWhisperModel(options.whisperModel, layout(home).whisperModel);
+      say(`Whisper model installed: ${layout(home).whisperModel}`);
+    }
+    if (options.soundfont) {
+      const got = await installSoundfont(home, loadEnv(home), options.soundfont);
+      say(`SoundFont installed: ${got.id} (${path.join(layout(home).soundfonts, got.entry.file)}, sha256 ${got.entry.sha256})`);
+      say(`Fonts now listed: ${listedFonts(got.reg)}`);
+    }
     return 0;
   }
   checkDisk(home);

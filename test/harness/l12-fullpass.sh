@@ -1,0 +1,27 @@
+#!/bin/bash
+# L12 full pass: the gate's automated tests plus the L12 music tests, literal output to the evidence file given.
+R="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$R"; OUT="$1"; NODE="$HOME/Library/Application Support/SynergyStudioLite/runtime/node/bin/node"
+step() { echo "\$ $1" >> "$OUT"; }
+echo "### L12 full pass, $(date -u +%FT%TZ)" > "$OUT"
+step "node --test test/*.test.mjs"; node --test test/*.test.mjs 2>&1 | grep -E "^ℹ (tests|pass|fail) " >> "$OUT"
+step "pytest tests"; tmp/testvenv/bin/python -m pytest tests -q 2>&1 | tail -1 >> "$OUT"
+step "L12 tests 1 to 4 (instrument and score file tests, printed numbers)"; tmp/testvenv/bin/python -m pytest tests/test_instruments.py tests/test_score_file.py -q -s 2>&1 | grep -E "ms after|offsets|512 block|flute|passed|failed" >> "$OUT"
+node test/harness/tools-list.mjs tmp/tools-list.json > /dev/null; cp tmp/tools-list.json ledger/evidence/tools-list-l12.json
+step "T0 ($(python3 -c 'import json;print(len(json.load(open("tmp/tools-list.json"))["tools"]))') tools)"; node test/harness/t0-contract.mjs skills/synergy-studio --tools tmp/tools-list.json 2>&1 | tail -1 >> "$OUT"
+step "T0 falsifier"; node test/harness/t0-contract.mjs skills/synergy-studio --tools tmp/tools-list.json --falsifier 2>&1 | grep falsifier >> "$OUT"
+step "T2"; node --test test/lib-page.test.mjs 2>&1 | grep -E "^ℹ (pass|fail) " >> "$OUT"
+step "T4 word timing"; "$NODE" test/harness/t4-word-timing.mjs 2>&1 | grep -E "^(PASS|FAIL|PENDING)" >> "$OUT"
+step "T7s synctest"; "$NODE" skills/synergy-studio/scripts/studio.mjs synctest 2>&1 | grep -E "^(PASS|FAIL)" >> "$OUT"
+step "T7s falsifier"; "$NODE" test/harness/late-beep-synctest.mjs 2>&1 | grep -E "^(PASS|FAIL)" | cut -c1-200 >> "$OUT"
+step "T5 examples"; "$NODE" test/harness/t5-examples.mjs 2>&1 | grep -E "^(PASS|FAIL)" >> "$OUT"
+step "T6 determinism"; "$NODE" test/harness/t6-determinism.mjs 2>&1 | grep -E "^(PASS|FAIL)" >> "$OUT"
+rm -rf "$HOME/Movies/Synergy Studio/t15-hydration-tips" "$HOME/Movies/Synergy Studio/l12-afrobeats-film"
+step "T15 MCP end to end"; (cd test && node harness/t15-mcp-end-to-end.mjs 2>&1 | grep -E "T15 (PASS|FAIL)|^FAIL") >> "$OUT"
+step "L12 test 5 (film with a score through MCP)"; (cd test && node harness/l12-music-mcp.mjs l12-afrobeats-film 2>&1 | grep -E "^ +(PASS|FAIL|WARN)|impact:|test 5 PASS|^FAIL|bar 5 at|notes on") >> "$OUT"
+rm -rf "$HOME/Movies/Synergy Studio/l12-afrobeats-film-late"
+step "L12 test 5 falsifier (impact written 3 frames late)"; (cd test && node harness/l12-music-mcp.mjs l12-afrobeats-film-late "" late 2>&1 | grep -E "impact:|^FAIL") >> "$OUT"
+rm -rf "$HOME/Movies/Synergy Studio/l12-afrobeats-film-late"
+step "L12 test 6 (no score: same bytes as 8b279e1)"; test/harness/l12-regression.sh 2>&1 | awk '{print $1}' | sort | uniq -c >> "$OUT"
+step "L12 test 7 (heavy hits)"; "$NODE" test/harness/l12-loud-hits.mjs 2>&1 | grep -E "LUFS|limiter|FAIL" >> "$OUT"
+step "T17 bundle"; node scripts/pack-bundle.mjs 2>&1 | grep -E "validation|package size|unpacked size|smoke test|staged" >> "$OUT"
+echo "done $(date -u +%FT%TZ)" >> "$OUT"

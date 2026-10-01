@@ -14,12 +14,20 @@ Two modes (project.json "mode"):
               scenes {"id", "start", "end"} in seconds, music is usually your own score file.
 Music (project.json "music"): "warm" | "calm" | "upbeat" (generated) | "none" |
   {"file": "src/assets/song.mp3", "start": 47.3, "gain_db": -3}  (a section of your own licensed song)
+The score (src/score.json, real instruments, instruments.py) is rendered here with the timing just computed and mixed at
+48 kHz stereo, ducked like the bed. It replaces a generated bed and plays on top of a song file. Without a score file the
+mix is built exactly as before (mono, 24 kHz).
+Arguments: <project> [ffmpeg] [soundfonts folder] [--score-only]; --score-only writes the timing and the score, then stops.
 """
 import json, re, sys, pathlib
 import numpy as np, soundfile as sf
 
-proj = pathlib.Path(sys.argv[1])
-ffmpeg = sys.argv[2] if len(sys.argv) > 2 else "ffmpeg"
+ARGS = [a for a in sys.argv[1:] if a != "--score-only"]
+SCORE_ONLY = "--score-only" in sys.argv[1:]
+proj = pathlib.Path(ARGS[0])
+ffmpeg = ARGS[1] if len(ARGS) > 1 else "ffmpeg"
+SOUNDFONTS = ARGS[2] if len(ARGS) > 2 else None
+SCORE_FILE = proj / "src" / "score.json"
 try:
     cfg = json.loads((proj / "project.json").read_text())
 except json.JSONDecodeError as e:
@@ -31,6 +39,8 @@ FILM = MODE == "film"
 if FILM:                                # wordless: footage timing, no voice, no automatic whooshes
     MODE, cfg["voice_track"] = "footage", False
     cfg.setdefault("transition_whoosh", False)
+if MODE == "narrated" and not (proj / "durations.json").is_file():
+    sys.exit(f"ERROR: durations.json is missing: a narrated video is timed by its voice. Run studio voice {proj} first.")
 dur = json.loads((proj / "durations.json").read_text()) if MODE == "narrated" else {}
 SR = 24000
 # pauses omitted from project.json: 9:16 is tighter (lead 0.4, pre 0.3, post 0.7, tail 2.0), other aspects 0.9, 0.6, 1.2, 2.5
@@ -113,6 +123,24 @@ timing = {"T": T, "EV": EV, "CUE": CUE, "SYNC": SYNC, "TOTAL": TOTAL, "fps": cfg
 (proj / "timing.json").write_text(json.dumps(timing, indent=1))
 (proj / "timing.js").write_text("window.TIMING = " + json.dumps(timing) + ";\n")
 
+score = None                                                        # (stereo 48 kHz array, report) when src/score.json exists
+if SCORE_FILE.is_file():
+    sys.path.insert(0, str(pathlib.Path(__file__).parent))
+    from score_file import ScoreError
+    try:
+        from instruments import render_project, report_lines
+        score = render_project(proj, timing, TOTAL, SOUNDFONTS)
+    except ScoreError as e:
+        sys.exit("ERROR: src/score.json was not played:\n  " + "\n  ".join(e.problems))
+    except ImportError as e:
+        sys.exit(f"ERROR: the instrument engine is not installed ({e}): run studio setup")
+    print("\n".join(report_lines(score[1])))
+    print("wrote audio/score-inst.wav and audio/score-report.json")
+if SCORE_ONLY:
+    if score is None:
+        sys.exit("ERROR: there is no src/score.json to play")
+    sys.exit(0)
+
 n = int(TOTAL * SR) + SR
 tt = np.arange(n) / SR
 vo = np.zeros(n, np.float32)
@@ -128,8 +156,20 @@ for sc in (scenes if MODE == "narrated" else []):
         if sr != SR: sys.exit(f"{f}: expected {SR} Hz")
         i = int(T[sc["id"]]["vo"] * SR); vo[i:i + len(a)] += a[: n - i]
 
+def duck_curve(vo):                                                 # 1 with no voice, about 0.4 (-8 dB) while it speaks
+    win = int(0.05 * SR); rms = np.sqrt(np.convolve(vo ** 2, np.ones(win) / win, "same"))
+    duck = 1 - 0.6 * np.clip(rms / 0.03, 0, 1); k = int(0.3 * SR); return np.convolve(duck, np.ones(k) / k, "same")
+
 rng = np.random.default_rng(7)
 mood = cfg.get("music", "warm")
+if score is not None and isinstance(mood, str) and mood in ("warm", "calm", "upbeat"):
+    print(f'the score replaces the generated "{mood}" bed (src/score.json is the music)')
+    mood = "none"
+if score is not None and isinstance(mood, dict) and str(mood.get("file", "")).replace("\\", "/").lstrip("./") == "src/assets/score.wav":
+    print("the score replaces the starter score src/assets/score.wav (src/score.json is the music)")
+    mood = "none"
+if score is not None and isinstance(mood, dict) and score[1]["pitched_tracks"]:
+    print(f'WARNING: the score plays notes on top of {mood.get("file")}: two pieces of music fight. Keep the score to hits and drums, or set "music": "none"')
 music = np.zeros(n, np.float32)
 if isinstance(mood, dict):                                         # the user's own song, one section
     import subprocess
@@ -138,8 +178,7 @@ if isinstance(mood, dict):                                         # the user's 
     subprocess.run([ffmpeg, "-loglevel", "error", "-y", "-ss", str(mood.get("start", 0)), "-t", str(TOTAL + 1), "-i", str(proj / mood["file"]),
                     "-ac", "1", "-ar", str(SR), str(tmpw)], check=True)
     a, _ = sf.read(tmpw, dtype="float32"); tmpw.unlink(); music[: min(n, len(a))] = a[:n] * 10 ** (mood.get("gain_db", -3) / 20) / 0.9
-    win = int(0.05 * SR); rms = np.sqrt(np.convolve(vo ** 2, np.ones(win) / win, "same"))
-    duck = 1 - 0.6 * np.clip(rms / 0.03, 0, 1); k = int(0.3 * SR); duck = np.convolve(duck, np.ones(k) / k, "same")
+    duck = duck_curve(vo)
     music *= duck * np.minimum(1, tt / 0.3) * np.minimum(1, np.maximum(0, TOTAL - tt) / 2.0)
 elif mood != "none":
     chords = {"warm": [[261.63, 329.63, 392.0, 493.88], [220.0, 261.63, 329.63, 392.0], [174.61, 220.0, 261.63, 329.63], [196.0, 246.94, 293.66, 329.63]],
@@ -161,9 +200,7 @@ elif mood != "none":
         if i + L >= n: break
         ts = np.arange(L) / SR; f = chords[int(b * beat / seg) % 4][b % 4] * 2
         music[i:i + L] += (0.05 if mood == "upbeat" else 0.035) * np.exp(-ts * 18) * np.sin(2 * np.pi * f * ts)
-    win = int(0.05 * SR); rms = np.sqrt(np.convolve(vo ** 2, np.ones(win) / win, "same"))
-    duck = 1 - 0.6 * np.clip(rms / 0.03, 0, 1)                         # music dips under the voice
-    k = int(0.3 * SR); duck = np.convolve(duck, np.ones(k) / k, "same")
+    duck = duck_curve(vo)                                            # music dips under the voice
     music *= duck * np.minimum(1, tt / 1.5) * np.minimum(1, np.maximum(0, TOTAL - tt) / 2.5)
 
 fx = np.zeros(n, np.float32)
@@ -188,13 +225,70 @@ if cfg.get("transition_whoosh", True):
     for sc in scenes[1:]:
         whoosh(T[sc["id"]]["start"])
 
+SCORE_SR = 2 * SR                                                  # the score keeps its 48 kHz: hats and cymbals live above 12 kHz
+SCORE_PEAK = 0.5                                                    # the score stem's peak before ducking
+SCORE_UNDER_VOICE_DB = 10.0                                         # with a voice, the score sits this far under it while it speaks
+
+
+def upsample2(x):
+    """24 kHz to 48 kHz through the spectrum: the band limited voice and bed come out unchanged, the same bytes every run."""
+    X = np.fft.rfft(x.astype(np.float64)); Y = np.zeros(len(x) + 1, complex); Y[: len(X)] = X
+    return np.fft.irfft(Y, 2 * len(x)) * 2
+
+
+BUS_BLOCK = 240                                                     # 5 ms blocks at 48 kHz
+BUS_RATIO = 3.0
+BUS_MAX_DB = 6.0                                                    # the bus never takes more than this
+BUS_ATTACK_BLOCKS, BUS_RELEASE_DB_PER_BLOCK = 2, 0.25               # about 10 ms down, 1 dB back every 20 ms
+
+
+def bus_compress(s):
+    """A gentle bus compressor for the score (3:1 above the level of its loud stretches, at most 6 dB), so the final
+    limiter has less to take off the drum and hit transients. Deterministic: block peaks and a smoothed gain curve."""
+    nb = len(s) // BUS_BLOCK
+    if nb < 4: return s
+    pk = np.abs(s[: nb * BUS_BLOCK]).max(axis=1).reshape(nb, BUS_BLOCK).max(axis=1)
+    active = pk[pk > 1e-4]
+    if active.size < 4: return s
+    thr = np.percentile(active, 80)                                 # the level the groove reaches often; only what rises above is held
+    want = np.minimum(BUS_MAX_DB, np.maximum(0, 20 * np.log10(np.maximum(pk, 1e-9) / thr)) * (1 - 1 / BUS_RATIO))
+    for i in range(nb - 2, -1, -1):                                 # look ahead: start pulling down before the transient
+        want[i] = max(want[i], want[i + 1] - BUS_MAX_DB / BUS_ATTACK_BLOCKS)
+    g = np.empty(nb); g[0] = want[0]
+    for i in range(1, nb):                                          # let go slowly
+        g[i] = max(want[i], g[i - 1] - BUS_RELEASE_DB_PER_BLOCK)
+    curve = np.interp(np.arange(len(s)), np.arange(nb) * BUS_BLOCK + BUS_BLOCK / 2, 10 ** (-g / 20))
+    return s * curve[:, None]
+
+
+def score_stem(stem, music24):
+    """The score at 48 kHz stereo: set to its level, cut at the end of the video, ducked under the voice and kept
+    SCORE_UNDER_VOICE_DB under it while it speaks. Also returns the music layer at 24 kHz mono for the balance checks."""
+    s = np.zeros((2 * n, 2)); m = min(len(s), len(stem)); s[:m] = stem[:m]
+    s = bus_compress(s)                                             # measured: limiter 6.9 -> 2.8 dB on an Afrobeats film, same loudness
+    peak = float(np.max(np.abs(s)))
+    if peak > 0: s *= SCORE_PEAK / peak
+    end = min(len(s), int(round(TOTAL * SCORE_SR))); f0 = max(0, end - int(0.05 * SCORE_SR))
+    s[f0:end] *= np.linspace(1, 0, end - f0)[:, None]; s[end:] = 0
+    s *= np.repeat(duck_curve(vo), 2)[:, None]
+    alone = lambda: s.mean(1).reshape(-1, 2).mean(1)               # the score at 24 kHz mono
+    heard = lambda: music24 + alone()
+    under = balance(vo, alone(), fx, SR, [])["music_under_db"]       # the score alone: a song's level has its own warning
+    if under is not None and under < SCORE_UNDER_VOICE_DB:
+        s *= 10 ** ((under - SCORE_UNDER_VOICE_DB) / 20)
+    return s, heard()
+
+
 mix = vo + 0.9 * music + fx
 (proj / "audio").mkdir(parents=True, exist_ok=True)
 # balance of the layers (speech.py): music under the voice, and every effect against the voice
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from speech import balance, MUSIC_UNDER_DB, EFFECT_OVER_DB
+music_heard = 0.9 * music
+if score is not None:
+    stem, music_heard = score_stem(score[0], music_heard)
 fx_events = [(t0, kind) for t0, kind in SFX] + ([(T[sc["id"]]["start"], "whoosh (scene change)") for sc in scenes[1:]] if cfg.get("transition_whoosh", True) else [])
-bal = balance(vo, 0.9 * music, fx, SR, fx_events)
+bal = balance(vo, music_heard, fx, SR, fx_events)
 if bal["music_under_db"] is not None and not bal["music_ok"]:
     print(f"WARNING: the music is only {bal['music_under_db']:.1f} dB under the voice while it speaks (keep it {MUSIC_UNDER_DB:.0f} dB or more under):"
           + (' lower "gain_db" of the song' if isinstance(mood, dict) else ' choose a calmer mood or "music": "none"'))
@@ -203,8 +297,12 @@ for ev in bal["effects"]:
         print(f"WARNING: the {ev['name']} at {ev['at']:.2f} s is {ev['over_voice_db']:.1f} dB louder than the voice's usual level (keep effects at most {EFFECT_OVER_DB:.0f} dB above it): move it off the words or drop it")
 (proj / "audio" / "mix-report.json").write_text(json.dumps(bal, indent=1))
 from speech import layer_levels                                     # what studio inspect draws: each layer's level over time
-(proj / "audio" / "layers.json").write_text(json.dumps({**layer_levels(vo, 0.9 * music, fx, SR), "events": [{"at": round(t, 2), "name": k} for t, k in fx_events]}))
-sf.write(proj / "audio" / "mix_raw.wav", np.stack([mix, mix], 1), SR)
+(proj / "audio" / "layers.json").write_text(json.dumps({**layer_levels(vo, music_heard, fx, SR), "events": [{"at": round(t, 2), "name": k} for t, k in fx_events]}))
+if score is None:
+    sf.write(proj / "audio" / "mix_raw.wav", np.stack([mix, mix], 1), SR)
+else:                                                               # float, so the hits are never clipped before mastering
+    from instruments import write_float_wav                          # float, and the same bytes for the same samples
+    write_float_wav(proj / "audio" / "mix_raw.wav", (upsample2(mix)[:, None] + stem).astype(np.float32), SCORE_SR)
 for s_, v in T.items():
     if MODE == "narrated": print(f"  {s_}: {v['start']:6.2f}–{v['end']:6.2f} s  (narration {v['vo']:.2f}–{v['vo_end']:.2f}; event t counts from {v['vo']:.2f})")
     else: print(f"  {s_}: {v['start']:6.2f}–{v['end']:6.2f} s  (event t counts from the scene start, {v['start']:.2f})")

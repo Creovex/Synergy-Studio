@@ -10,7 +10,7 @@ import { toolHome, projectsHome, layout } from "../skills/synergy-studio/scripts
 import { loadEnv, toolEnv } from "../skills/synergy-studio/scripts/lib/env.mjs";
 
 export const SERVER_NAME = "synergy-studio";
-export const SERVER_VERSION = "0.2.0";
+export const SERVER_VERSION = "0.3.0";
 export const INSTRUCTIONS = [
   "Synergy Studio makes and improves short videos on this computer: narrated explainers and ads, talking head reels with word captions, photo or product ads cut to music, wordless animated stories and films, light 3D.",
   "Call studio_guide first in every conversation and follow it; it lists the references (studio_reference) and the examples (studio_example).",
