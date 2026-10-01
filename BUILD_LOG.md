@@ -752,3 +752,24 @@ T7s, T15, T17, L12 tests 5, 6 and 7 with their falsifiers as required. Version 0
 rather than shared with it (the starter is copied into projects as a standalone script and must keep its bytes), so a
 change to one is not made in the other. In one run of three the model chose instruments for a calm clip before the rule
 was made explicit; two runs after it are not proof that it never will.
+
+## L14: the architecture document, kept with the code
+
+James asked for one detailed description of the whole app, kept in the repository and updated with every change, so the
+system is understood from the document rather than from memory, with the PDF built from the same knowledge.
+
+- `docs/ARCHITECTURE.md` (new): Part A (the ideas: MCP, HyperFrames, GSAP, FFmpeg, sound and music as numbers, Kokoro,
+  Whisper, determinism; written for a college student, no term used before it is explained), Part B (the layers, setup,
+  a project, one video step by step, timing with a worked example, sound, the score file with the tempo solve, rendering,
+  the checks, the MCP server) and Part C (the developer reference: repository map, every CLI module, Python script and
+  server module, the data formats, the control flow of the main commands, conventions, tests, limits, history, and how
+  to keep it true), plus a glossary.
+- `scripts/build-architecture-pdf.mjs` (new): converts it to HTML (a Markdown subset: headings, lists, tables, code,
+  callout boxes, diagrams), adds appendices generated from the code (all tools with their inputs, the command line help)
+  and prints `dist/architecture.pdf` with the tool home's render browser. Node built ins only.
+- `test/architecture-doc.test.mjs` (new): every tool, command, CLI module, Python script and server module that exists
+  is named in the document, the stated counts and version are the real ones, and the converter makes the cover, a page
+  per part, boxes, tables, lists and diagrams. Its first run found six tools the document had left out
+  (`studio_project_list`, `studio_file_list`, `studio_file_read`, `studio_compose`, `studio_synctest`, `studio_job_log`);
+  they are now described.
+- AGENTS.md: read Part C before working on the code; every change updates the document in the same commit. README points to it.

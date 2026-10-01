@@ -6,7 +6,8 @@ or a score Claude writes as data and the tools play on real sampled instruments,
 see the instructions and can run the whole pipeline: new videos, footage edits with word captions, improving a
 finished MP4, looks taken from a reference, three.js scenes.
 
-- Specification: `LITE.md`. Build record and test evidence: `BUILD_LOG.md`. Licences: `NOTICE.md`.
+- Specification: `LITE.md`. How it works, as built: `docs/ARCHITECTURE.md` (a PDF of it: `node scripts/build-architecture-pdf.mjs`).
+  Build record and test evidence: `BUILD_LOG.md`. Licences: `NOTICE.md`.
 - Proven on macOS on Apple Silicon. Windows and Linux are written for but not proven (PENDING).
 - The first use downloads about 2 GB into `~/Library/Application Support/SynergyStudioLite` (its own Node, uv,
   Python, the voice model, the Whisper model, ffmpeg and the render browser). Nothing is installed system wide and

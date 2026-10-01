@@ -1,6 +1,8 @@
 # Working in this repository
 
 Read `LITE.md` (the specification) before changing anything. `BUILD_LOG.md` is the public record of every task.
+`docs/ARCHITECTURE.md` describes how the app works as built: read its Part C before working on the code, and go to it
+rather than to memory.
 
 ## Writing rules
 
@@ -15,4 +17,7 @@ Read `LITE.md` (the specification) before changing anything. `BUILD_LOG.md` is t
 - `reference/` and `ledger/` are never committed; neither are videos, renders, models or archives.
 - Each worker owns only its own files; no two workers edit the same file.
 - Commit format: `lite L<n>: <what changed>`, one commit per level.
+- `docs/ARCHITECTURE.md` stays true: every change that adds, removes or changes a tool, command, module, data format, flow,
+  threshold or limit updates it in the same commit (`test/architecture-doc.test.mjs` fails when a tool, command or module
+  is missing from it). The PDF is built from it: `node scripts/build-architecture-pdf.mjs` writes `dist/architecture.pdf`.
 - Every release raises the version in `.claude-plugin/plugin.json`, `bundle/manifest.json`, `mcp/context.mjs` (`SERVER_VERSION`) and `package.json` together (`test/version.test.mjs` checks they agree): Claude Code only updates an installed plugin when the version changes.
