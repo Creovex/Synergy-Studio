@@ -24,7 +24,7 @@ that as the tool `studio_audio`: every command has a tool of the same name with 
 | bring the user's own logo, photo, clip, song or font in | `studio_file_add` |
 | plan the words, make the voice, build the timing and mix | `studio_budget`, `studio_say`, `studio_voice`, `studio_audio`, `studio_words` |
 | cut, transcribe and analyse footage | `studio_cut`, `studio_transcribe`, `studio_silences`, `studio_scenes`, `studio_beats` |
-| write music with real instruments, locked to the cues and scene events (genre, warm, premium, cinematic, comedy) | `src/score.json` (`studio_file_write`; how: `studio_reference` `music-for-picture` and `music-for-picture-score-format`), `studio_sounds`, `studio_score`, `studio_audio` |
+| write music locked to the cues and scene events: real instruments (genre, warm, premium, cinematic), toy sounds (cartoon, kids, chiptune), or both (comedy) | `src/score.json` (`studio_file_write`; how: `studio_reference` `music-for-picture` and `music-for-picture-score-format`), `studio_sounds`, `studio_score`, `studio_audio` |
 | write the cue sheet of a film, read it back, and make the starter score with a hit on every cue | project.json `cues` (`studio_file_write`), `studio_cues`, `studio_score` |
 | see every lint error, or look at the video before rendering (`cues: true` shoots every cue before, on and after; `range_from`, `range_to` and `every` shoot a whole shot) | `studio_compose`, `studio_stills` |
 | measure how much of a picture is in the brand colour (ACCENT, HEAVY or FLOODED) | `studio_brand_check` |

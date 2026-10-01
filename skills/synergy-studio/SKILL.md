@@ -85,10 +85,14 @@ Narrated video (the kind of the AllSpace reels, LSPedia, the Synergy Studio expl
    `music` (`upbeat` for social energy, `warm` for friendly explainers, `calm` for serious or premium,
    `none`, or the user's song), `speed` (0.95 default; 0.85–0.9 for a calm premium read, up to 1.05 for energy),
    `lexicon` (brand pronunciations), `platform` (tiktok · reels · meta · shorts · youtube · linkedin · x · website).
-   **Music with real instruments:** for a genre (Afrobeats, amapiano, hip-hop, lo-fi), warm, premium, cinematic or comedy
-   work, write the music as `src/score.json` (the music-for-picture skill; `studio_reference` with
-   `music-for-picture`, then `music-for-picture-score-format`), check it with `studio_score`, and `studio_audio` mixes it
-   in place of the bed. A generated bed is fine for quick background; the user's track always wins (voice-and-audio.md).
+   **Music:** pick the engine (voice-and-audio.md): a generated bed for background (calm, ambient, looping or utility
+   clips: do not write a score for these); **toy sounds** (`"synth"`
+   tracks, `"kit": "toy"`, hits such as `boing`) for cartoon, kids and chiptune work; **real instruments** (SoundFont
+   programs) for a genre (Afrobeats, amapiano, hip-hop, lo-fi), warm, premium, documentary and cinematic work; both
+   together for comedy (a real playful orchestra with toy hits on the gags); the user's track whenever there is one.
+   Toy and real music is written as `src/score.json` (the music-for-picture skill; `studio_reference` with
+   `music-for-picture`, then `music-for-picture-score-format`), checked with `studio_score`, and `studio_audio` mixes
+   it in place of the bed.
    **Length budget:** call `studio_budget` before writing the narration: it prints how many words fit
    per scene for the target length (total = narration + pauses: lead, pre and post per scene, tail).
    `studio_audio` prints the real split and warns when over `length`. Brand names: `studio_say` with `text: "HAURA"`

@@ -24,6 +24,9 @@ const CLI_COMMANDS = new Set(["setup", "doctor", "new", "budget", "say", "voice"
 
 // ---------------------------------------------------------------- results
 const text = (value, extra = {}) => ({ content: [{ type: "text", text: value }], ...extra });
+// Claude Code gives the model a tool's structuredContent instead of its text when both are present, so structured results
+// also carry the whole text as `message` (measured: without it the model saw no check lines in a finished check job).
+const structured = (fields, message) => ({ ...fields, message });
 const fail = (value) => ({ content: [{ type: "text", text: value }], isError: true });
 
 // The CLI talks about `studio audio`; here that is the tool studio_audio.
@@ -53,8 +56,10 @@ function resultText(job) {
   return toolWords(tail(clean(result.text ?? ""), RESULT_LIMIT));
 }
 
-const jobStarted = (id, label) =>
-  text(`${JSON.stringify({ job_id: id, state: "queued" })}\n${label} runs as a job. Call studio_job_status with this job_id and wait_sec 25 until it is done; studio_job_log shows the log.`, { structuredContent: { job_id: id } });
+const jobStarted = (id, label) => {
+  const message = `${JSON.stringify({ job_id: id, state: "queued" })}\n${label} runs as a job. Call studio_job_status with this job_id and wait_sec 25 until it is done; studio_job_log shows the log.`;
+  return text(message, { structuredContent: structured({ job_id: id, state: "queued" }, message) });
+};
 
 const seconds = (job) => (job.started && job.ended ? Math.round((Date.parse(job.ended) - Date.parse(job.started)) / 1000) : null);
 
@@ -79,7 +84,8 @@ function startStudio({ label, args, project, attach, id, cwd, node }) {
 async function waitOrJob({ id, label, signal, after, tempFiles = [] }) {
   const job = await waitForJob(id, SYNC_WAIT_SEC, signal);
   if (!isFinal(job)) {
-    return text(`${JSON.stringify({ job_id: id, state: job.state })}\n${label} has not finished after ${SYNC_WAIT_SEC} s and keeps running as a job. Call studio_job_status with this job_id and wait_sec 25.`, { structuredContent: { job_id: id } });
+    const message = `${JSON.stringify({ job_id: id, state: job.state })}\n${label} has not finished after ${SYNC_WAIT_SEC} s and keeps running as a job. Call studio_job_status with this job_id and wait_sec 25.`;
+    return text(message, { structuredContent: structured({ job_id: id, state: job.state }, message) });
   }
   const failed = job.state === "failed";
   let body = resultText(job);
@@ -594,7 +600,7 @@ define(
 
 define(
   "studio_score",
-  "Checks and renders src/score.json, music you write as data (drum grids, notes, chords and hits at bar:beat positions, bars anchored to cues and scene events) on real sampled instruments, and returns the report: solved tempo, anchor and hit times, note count, peak. Use it after writing or changing src/score.json (music-for-picture skill, studio_reference music-for-picture-score-format), before studio_audio, which mixes it. Without src/score.json it writes the bundled starter score (a soft bed and a placeholder hit per cue) to src/assets/score.wav and sets \"music\" to it. It never runs code from the project.",
+  "Checks and renders src/score.json, music you write as data (drum grids, notes, chords and hits at bar:beat positions, bars anchored to cues and scene events) on real sampled instruments (genre, warm, premium, cinematic) or toy sounds (cartoon, kids, chiptune: synth tracks, the toy kit, boing and other cartoon hits) or both, and returns the report: solved tempo, anchor and hit times, each track's peak, note count. Use it after writing or changing src/score.json (music-for-picture skill, studio_reference music-for-picture-score-format), before studio_audio, which mixes it. Without src/score.json it writes the bundled starter score (a soft bed and a placeholder hit per cue) to src/assets/score.wav and sets \"music\" to it. It never runs code from the project.",
   { name: nameProp },
   ["name"],
   WRITE_GENERATED,
@@ -681,11 +687,15 @@ define(
   async ({ job_id, wait_sec }, ctx) => {
     const job = await waitForJob(job_id, wait_sec ?? 20, ctx.signal);
     const head = `Job ${job.id} (${job.label})`;
-    if (!isFinal(job)) return text(`${head}: ${progressText(job)}`, { structuredContent: { job_id: job.id, state: job.state } });
+    if (!isFinal(job)) {
+      const message = `${head}: ${progressText(job)}`;
+      return text(message, { structuredContent: structured({ job_id: job.id, state: job.state }, message) });
+    }
     const took = seconds(job);
     const summary = `${head}: ${job.state}${job.exit_code === null ? "" : ` (exit code ${job.exit_code})`}${took === null ? "" : `, ${took} s`}`;
     const body = resultText(job);
-    return { content: [{ type: "text", text: `${summary}\n${body}`.trim() }, ...(await jobImages(job))], structuredContent: { job_id: job.id, state: job.state, exit_code: job.exit_code } };
+    const message = `${summary}\n${body}`.trim();
+    return { content: [{ type: "text", text: message }, ...(await jobImages(job))], structuredContent: structured({ job_id: job.id, state: job.state, exit_code: job.exit_code }, message) };
   },
   { title: "Job status" },
 );

@@ -20,6 +20,8 @@ import json
 import math
 import re
 
+import toys
+
 KITS = {"standard": 0, "room": 8, "power": 16, "electronic": 24, "tr808": 25, "jazz": 32, "brush": 40, "orchestra": 48}
 DRUMS = {"kick": 36, "kick2": 35, "snare": 38, "rim": 37, "clap": 39, "esnare": 40, "chh": 42, "phh": 44, "ohh": 46,
          "tom_lo": 45, "tom_mid": 48, "tom_hi": 50, "crash": 49, "ride": 51, "splash": 55, "tamb": 54, "cowbell": 56,
@@ -32,11 +34,14 @@ CHORDS = {"": [0, 4, 7], "m": [0, 3, 7], "7": [0, 4, 7, 10], "m7": [0, 3, 7, 10]
           "sus2": [0, 2, 7], "sus4": [0, 5, 7], "dim": [0, 3, 6], "add9": [0, 4, 7, 14]}
 GRID_VELOCITY = {"x": 100, "X": 120, "o": 45}
 REVERBS = {"none": 0.0, "room": 0.8, "hall": 2.0}     # decay time in seconds
-HIT_SOUNDS = ("impact", "sting", "roll")
+HIT_SOUNDS = ("impact", "sting", "roll")                # real instruments (SoundFont); toys.HITS are the cartoon ones
+ALL_HITS = HIT_SOUNDS + tuple(toys.HITS)
 TOP_FIELDS = {"length", "tempo", "anchors", "font", "seed", "reverb", "tracks", "hits"}
 TEMPO_FIELDS = {"bpm", "meter", "swing", "max_stretch"}
 DRUM_FIELDS = {"kit", "gain_db", "humanize", "grids", "pan"}
 PITCHED_FIELDS = {"program", "bank", "gain_db", "humanize", "octave", "rhythm", "notes", "chords", "bend_range", "bends", "pan"}
+SYNTH_FIELDS = {"synth", "gain_db", "humanize", "octave", "rhythm", "notes", "chords", "pan"}
+TOY_DRUMS = [d for d, key in DRUMS.items() if key in toys.KIT]
 HIT_FIELDS = {"at", "sound", "offset", "gain_db", "pitch"}
 DEFAULT_STRETCH = 0.06
 DEFAULT_HUMANIZE = 8
@@ -254,6 +259,7 @@ class Compiler:
         self.programs = []                   # [(channel, bank, preset, is_drums, label)]
         self.notes, self.controls, self.hits = [], [], []
         self.gain, self.group = 1.0, ""            # the current track's linear gain and name (the renderer plays each group alone)
+        self.pan, self.toy, self.toys = 0.0, None, []   # self.toy: None (SoundFont), "kit" or a toy voice name
 
     def channel(self, bank, preset, drums, owner, label):
         key = (bank, preset, drums, owner)
@@ -270,6 +276,13 @@ class Compiler:
         return self.t0 + swung(beats, self.swing) * self.spb
 
     def note(self, beats, ch, key, vel, length_beats, dry=False):
+        if self.toy:                               # a toy sound: made by toys.py, not the SoundFont
+            t = self.at(beats)
+            kind = "kit" if self.toy == "kit" else "voice"
+            self.toys.append({"kind": kind, "name": self.toy, "key": key, "vel": vel, "length": length_beats * self.spb, "t": t,
+                              "start": t, "dry": key in toys.DRY_KIT if kind == "kit" else self.toy in toys.DRY_VOICES,
+                              "gain": self.gain, "group": self.group, "pan": self.pan})
+            return
         if ch is not None:                         # None: the track already has a problem; its notes are still checked
             self.notes.append((self.at(beats), ch, key, vel, length_beats * self.spb, dry, self.gain, self.group))
 
@@ -277,7 +290,7 @@ class Compiler:
         """The track's gain is applied exactly to its own render pass (a font's quiet piano can be raised); pan is the channel's."""
         gain = number_in(track, "gain_db", -40, 24, 0, label, self.problems)
         pan = number_in(track, "pan", -1, 1, 0, label, self.problems)
-        self.gain, self.group = round(10 ** (gain / 20), 6), name
+        self.gain, self.group, self.pan = round(10 ** (gain / 20), 6), name, pan
         if ch is not None:
             self.controls.append((-1.0, ch, "cc", (10, round(64 + pan * 63))))
 
@@ -285,8 +298,11 @@ class Compiler:
         label = f'tracks.{name}'
         kit = track.get("kit")
         ch = None
-        if kit not in KITS:                        # still check the grids, so every problem of the track is listed at once
-            self.problems.append(f'{label}: unknown kit {json.dumps(kit)} (kits: {", ".join(KITS)})')
+        self.toy = "kit" if kit == "toy" else None
+        if kit == "toy":
+            pass                                   # the toy kit is made by toys.py; it needs no channel
+        elif kit not in KITS:                      # still check the grids, so every problem of the track is listed at once
+            self.problems.append(f'{label}: unknown kit {json.dumps(kit)} (kits: {", ".join(KITS)}, or "toy")')
         else:
             ch = self.channel(128, KITS[kit], True, name, label)
         self.track_gain(name, track, ch, label)
@@ -304,6 +320,9 @@ class Compiler:
                 if drum not in DRUMS:
                     self.problems.append(f'{glabel}: unknown drum "{drum}" (drums: {", ".join(DRUMS)})')
                     continue
+                if self.toy and DRUMS[drum] not in toys.KIT:
+                    self.problems.append(f'{glabel}: the toy kit has no "{drum}" (toy drums: {", ".join(TOY_DRUMS)})')
+                    continue
                 if not isinstance(pattern, str) or len(pattern) != steps:
                     self.problems.append(f'{glabel}.{drum}: a grid is exactly {steps} steps of x (hit), X (accent), o (ghost) and . (rest); '
                                          f'{json.dumps(pattern)} has {len(pattern) if isinstance(pattern, str) else "no"} steps')
@@ -319,6 +338,26 @@ class Compiler:
                         beats = (bar - 1) * self.bpb + step / 4
                         vel = humanized(GRID_VELOCITY[c], spread, self.seed, name, drum, bar, step)
                         self.note(beats, ch, DRUMS[drum], vel, 0.25, dry=DRUMS[drum] in DRY_DRUMS)
+
+    def synth_track(self, name, track):
+        """A toy instrument track: the same notes, chords and rhythm as a SoundFont track, played by toys.py."""
+        label = f'tracks.{name}'
+        voice = track.get("synth")
+        if voice not in toys.VOICES:
+            self.problems.append(f'{label}: unknown synth {json.dumps(voice)} (toy instruments: {", ".join(toys.VOICES)})')
+            return
+        self.toy = voice
+        self.track_gain(name, track, None, label)
+        spread = number_in(track, "humanize", 0, 40, DEFAULT_HUMANIZE, label, self.problems)
+        for i, n in enumerate(track.get("notes") or []):
+            self.one_note(name, label, f"notes[{i}]", n, None, spread, False)
+        octave = number_in(track, "octave", 0, 8, 4, label, self.problems)
+        rhythm = track.get("rhythm")
+        if rhythm is not None and (not isinstance(rhythm, str) or len(rhythm) != 4 * self.bpb or set(rhythm) - set("xXo.")):
+            self.problems.append(f'{label}: "rhythm" is exactly {4 * self.bpb} steps of x, X, o and .')
+            rhythm = None
+        for i, c in enumerate(track.get("chords") or []):
+            self.one_chord(name, label, f"chords[{i}]", c, None, spread, False, octave, rhythm)
 
     def pitched_track(self, name, track):
         label = f'tracks.{name}'
@@ -422,8 +461,9 @@ class Compiler:
         if not check_fields(h, HIT_FIELDS, label, self.problems):
             return
         t = resolve_time(h.get("at"), self.names, label, self.problems)
-        if h.get("sound") not in HIT_SOUNDS:
-            self.problems.append(f'{label}: unknown sound {json.dumps(h.get("sound"))} (sounds: {", ".join(HIT_SOUNDS)})')
+        if h.get("sound") not in ALL_HITS:
+            self.problems.append(f'{label}: unknown sound {json.dumps(h.get("sound"))} (real instruments: {", ".join(HIT_SOUNDS)}; '
+                                 f'toy: {", ".join(toys.HITS)})')
             return
         offset = number_in(h, "offset", -2, 2, 0, label, self.problems)
         gain = number_in(h, "gain_db", -40, 0, 0, label, self.problems)
@@ -436,6 +476,10 @@ class Compiler:
         t += offset
         self.hits.append({"sound": h["sound"], "at": h["at"], "t": round(t, 6)})
         g = round(10 ** (gain / 20), 6)               # applied to the hit's sound exactly; velocity would follow the font's curve
+        if h["sound"] in toys.HITS:
+            self.toys.append({"kind": "hit", "name": h["sound"], "key": root, "vel": 100, "length": toys.HIT_LENGTH[h["sound"]], "t": t,
+                              "start": toys.hit_start(h["sound"], t), "dry": False, "gain": g, "group": "hits", "pan": 0.0})
+            return
         vel = lambda v: max(1, min(127, round(v)))
         kit = self.channel(128, 0, True, "hits", label)
         if kit is None:
@@ -496,14 +540,16 @@ def compile_score(score, timing):
     c = Compiler(score, names, problems)
     c.spb, c.t0, c.bpb, c.swing = spb, t0, bpb, tempo["swing"]
     for name, track in tracks.items():
-        if not check_fields(track, DRUM_FIELDS if isinstance(track, dict) and "kit" in track else PITCHED_FIELDS, f"tracks.{name}", problems):
+        kind = "kit" if isinstance(track, dict) and "kit" in track else "synth" if isinstance(track, dict) and "synth" in track else "program"
+        if not check_fields(track, {"kit": DRUM_FIELDS, "synth": SYNTH_FIELDS, "program": PITCHED_FIELDS}[kind], f"tracks.{name}", problems):
             continue
-        (c.drum_track if "kit" in track else c.pitched_track)(name, track)
+        {"kit": c.drum_track, "synth": c.synth_track, "program": c.pitched_track}[kind](name, track)
+        c.toy = None
     for i, h in enumerate(score.get("hits") or []):
         c.hit(i, h)
-    if not c.notes and not problems:
+    if not c.notes and not c.toys and not problems:
         problems.append('the score has no notes: add "tracks" (grids, notes or chords) or "hits" (a silent score is never played)')
-    early = [n for n in c.notes if n[0] < -1e-9]
+    early = [n for n in c.notes if n[0] < -1e-9] + [(e["start"],) for e in c.toys if e["start"] < -1e-9]
     if early:
         problems.append(f"{len(early)} notes start before 0 s (the first at {min(n[0] for n in early):.3f} s): move a hit or roll later, "
                         "anchor bar 1 later, or start the music in a later bar")
@@ -513,6 +559,7 @@ def compile_score(score, timing):
     anchor_rows = [{"bar": a["bar"], "at": a["at"], "target_s": round(t, 6), "bar_s": round(bar_time(a["bar"]), 6)}
                    for a, (_, t) in zip(score.get("anchors") or [], anchors)]
     pitched = [name for name, track in tracks.items() if isinstance(track, dict) and "kit" not in track and (track.get("notes") or track.get("chords"))]
-    return {"notes": sorted(c.notes), "controls": c.controls, "programs": c.programs, "hits": c.hits, "pitched_tracks": pitched,
+    return {"notes": sorted(c.notes), "toys": sorted(c.toys, key=lambda e: (e["start"], e["group"], e["kind"], e["key"])),
+            "controls": c.controls, "programs": c.programs, "hits": c.hits, "pitched_tracks": pitched,
             "bpm": float(tempo["bpm"]), "bpm_solved": 60 / spb, "bar1_s": t0, "beats_per_bar": bpb, "anchors": anchor_rows,
             "reverb": reverb, "font": score.get("font"), "length": length, "seed": seed}

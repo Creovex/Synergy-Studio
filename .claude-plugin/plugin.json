@@ -1,7 +1,7 @@
 {
   "name": "synergy-studio",
   "displayName": "Synergy Studio",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Make and improve videos with Claude: narrated explainers, ads, footage edits with captions and motion graphics, rendered on this computer.",
   "author": { "name": "Synergy Studio" },
   "keywords": ["video", "motion-graphics", "captions", "hyperframes", "mcp"]

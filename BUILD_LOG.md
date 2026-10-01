@@ -696,3 +696,59 @@ full pass on the final code: node 264 of 264, pytest 258, T0 87 of 87 with 41 to
 PASS. Still open: T13, BLOCKED after three rounds (awaiting James's written acceptance or a fourth round); T18, PENDING
 (James installs `dist/synergy-studio.mcpb`, now with the music tools, in Claude Desktop and reports). Largest gap:
 nobody has listened to the music; it is measured for timing, level and balance, not judged by ear.
+
+## L13: toy sounds in the score file, and which engine Claude uses when
+
+James asked that the earlier cartoon instruments stay, sit beside the real instruments, and that Claude know which to
+use when. The bundled starter score (`template/score.py`) and the generated beds are unchanged: L12 test 6 still gives
+`29 SAME` against 8b279e1.
+
+**Built.** `scripts/toys.py` (new) re-expresses the starter score's voices for the score file, made from oscillators and
+noise with no SoundFont: toy instruments as tracks (`"synth": "pizz"`, `bell`, `musicbox`, `whistle`, `pad`, `bass`, `stab`,
+`square`), a toy kit (`"kit": "toy"`, 17 drum names) and 17 cartoon hits (`boing`, `bonk`, `slide_down` and more; a whoosh
+and a shimmer are centred on their time, a riser ends on it). One score may mix toy and real instruments; a toy only
+score needs no font. Noise comes from fixed PCG64 bit streams keyed by the seed and the event. The toy kit sits 8 dB
+lower than the starter's drums (measured 0 dBFS against -10 to -14 for the other tracks). `studio sounds` lists the toy
+names. Changed: `score_file.py`, `instruments.py`, `voice-and-audio.md` (a four way engine table and the toy names),
+`SKILL.md` (the build step names the engines), `commands.md`, `mcp.md`, the `studio_score` description, `LITE.md`.
+Tests: `tests/test_toys.py` (25).
+
+**Which engine when** (the rule in SKILL.md and voice-and-audio.md): a generated bed for background (calm, ambient,
+looping, utility clips; no score); toy sounds for cartoon, kids and chiptune; real instruments for a genre, warm, premium,
+documentary and cinematic work; both for comedy; the user's track whenever there is one.
+
+**Measured.**
+```
+boing +0.10 ms, bonk +0.02, pop +0.02, squeak +0.08, splat +0.02, puff +2.00, slide_up +0.50, tink +0.02, thunder +0.00 (never early, within 5 ms)
+whoosh: heard from 1.700 to 2.300 s (moment at 2.000)   shimmer: 1.316 to 2.684 s   riser: 0.533 to 2.000 s
+toy kick offsets: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] samples (0.02 ms spread; the plan's limit 0.1 ms)
+mixed with a real tuba: drums -8.0, hits -1.5, tiptoe -13.3, tune -10.6, tuba -14.3 dBFS
+```
+Falsifier for the moment rule: a whoosh, shimmer or riser placed like a transient misses its moment by more than 0.25 s.
+The first `shimmer` class (a transient) measured +39.96 ms and was wrong: it is a swell and is now centred.
+
+**Claude with only the plugin's tools** (Sonnet, the installed plugin disabled; evidence/l12/engine-choice.txt):
+- "a 15 s cartoon video of a cat chasing a ball of yarn, with silly sound effects": toy kit, `musicbox` and `pizz` synth
+  tracks, real tuba, xylophone and trombone, ten toy hits on cues; its first score was refused (three anchors) and it fixed
+  it from the message; check all PASS with `sync drop +0.001`, `sync bonk +0.003`, `sync boop +0.001 s`.
+- "a 20 s warm product video with Afrobeats music" (twice, my "You choose" reply after the intake questions): real
+  instruments by the genre recipe (standard kit, bass 33, keys 4, guitar 27, kalimba 108; once with a toy riser and
+  shimmer); the bed replaced; check all PASS, `sound balance: music 13 dB under the voice`.
+- "a 10 s calm background clip": the first run after the toy text wrote a real instrument score (pad, strings, piano),
+  where the run of 2026-09-30 chose the bed. The rule was made explicit (background music is the bed; a score only when the
+  music carries meaning); two reruns both chose `"music": "calm"`, no score, check all PASS.
+
+**Found on the way: check results hidden from Claude.** Claude Code gives the model a tool's `structuredContent` instead
+of its text, and finished job results carried only `{job_id, state, exit_code}`, so the model saw "done" and a contact
+sheet but never the check lines (earlier builds worked around it with `studio_job_log`). Every structured result now also
+carries the whole text as `message`. Proof: a headless run asked to quote the PASS lines of a finished check answered
+`NO PASS LINES` before the fix and quoted all ten after; `test/mcp.test.mjs` asserts it (fails on the old server, 17 of
+18). After the fix both calm reruns read their check lines without `studio_job_log`.
+
+**Full pass** (evidence/L12-toys-full-2026-10-01.txt): node 264 of 264, pytest 283, T0 87 of 87 (41 tools), T2, T4, T5, T6,
+T7s, T15, T17, L12 tests 5, 6 and 7 with their falsifiers as required. Version 0.4.0.
+
+**Named gaps.** Nobody has listened to the toy or real scores. The toy voices are re-expressed from `template/score.py`
+rather than shared with it (the starter is copied into projects as a standalone script and must keep its bytes), so a
+change to one is not made in the other. In one run of three the model chose instruments for a calm clip before the rule
+was made explicit; two runs after it are not proof that it never will.

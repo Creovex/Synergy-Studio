@@ -250,12 +250,16 @@ describe("empty tool home", () => {
     const done = await client.callTool({ name: "studio_job_status", arguments: { job_id: "aaaa-done", wait_sec: 0 } });
     assert.equal(done.structuredContent.state, "done");
     assert.match(textOf(done), /hello from the job/);
+    // Claude Code passes structuredContent to the model instead of the text: the result must be in it too (L12)
+    assert.match(done.structuredContent.message, /hello from the job/);
     const dead = await client.callTool({ name: "studio_job_status", arguments: { job_id: "bbbb-dead", wait_sec: 0 } });
     assert.equal(dead.structuredContent.state, "failed");
     assert.match(textOf(dead), /ended before it recorded a result/);
+    assert.match(dead.structuredContent.message, /ended before it recorded a result/);
     const live = await client.callTool({ name: "studio_job_status", arguments: { job_id: "cccc-live", wait_sec: 0 } });
     assert.equal(live.structuredContent.state, "running");
     assert.match(textOf(live), /queued, waiting for the heavy lock/);
+    assert.match(live.structuredContent.message, /queued, waiting for the heavy lock/);
     const log = await client.callTool({ name: "studio_job_log", arguments: { job_id: "aaaa-done", lines: 1 } });
     assert.equal(textOf(log), "line two");
     for (const bad of ["../aaaa-done", "nothing-here"]) {

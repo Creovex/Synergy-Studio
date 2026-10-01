@@ -19,12 +19,17 @@ in `lexicon`.
   lines as on-screen text, or use the user's own recorded voice (footage mode).
 
 ## Music: choose the engine first
-Say which you chose and why in one line.
+Say which you chose and why in one line. Write a score only when the music carries meaning: a genre, an emotion, or
+hits on the picture. Background music is the bed. All but the bed are written in the score file (below), and one score
+may mix them.
 | The video | Music |
 |---|---|
-| quick background: a utility clip, a draft, a calm 10 s loop | a generated bed: `warm`, `calm` or `upbeat` |
-| a genre (Afrobeats, amapiano, highlife, hip-hop, trap, lo-fi, R&B, house), warm, premium, documentary, cinematic or comedy work | the score file with real instruments (below) |
-| the user gave a track | their file; a score file may add timed hits on top, never a second melody |
+| background: a calm, ambient or looping clip, a utility clip, a draft, any video where the music is only wallpaper | a generated bed: `calm`, `warm` or `upbeat`; do not write a score for it |
+| cartoon, kids, toy-like, chiptune, retro game, very playful | **toy sounds**: `"synth"` tracks (`square` for chiptune, `pizz`, `musicbox`, `bell`), `"kit": "toy"` and cartoon hits (`boing`, `bonk`, `slide_down`, `splat`) |
+| a genre (Afrobeats, amapiano, highlife, hip-hop, trap, lo-fi, R&B, house), warm, premium, documentary | **real instruments**: SoundFont programs and kits, with the genre recipe |
+| cinematic, action, trailer | real orchestra (strings, brass, timpani, `impact`), plus toy `riser`, `whoosh` and `thud` for the effects |
+| comedy, an animated playful film | real playful orchestra (pizzicato 45, clarinet 71, tuba 58, xylophone 13, woodblocks) with toy hits on the gags (`boing`, `bonk`, `slide_down`, `squeak`) |
+| the user gave a track | their file; a score file may add timed hits (real or toy) on top, never a second melody |
 
 ## Music (`"music"` in project.json)
 - Generated (licence-free, made by `studio_audio`): `warm` (96 BPM, pad + pluck), `calm` (72 BPM), `upbeat` (118 BPM), `none`.
@@ -59,8 +64,16 @@ its frame and a rebuild gives the same bytes. How to compose it is the **music-f
 - **Sounds:** `"font"` is `musescore-lite` (installed by setup) or `fluidr3` when installed (`studio_setup_start` with
   `soundfont: "fluidr3"`); `studio_sounds` lists the programs and kits of a font. A program the font lacks is refused, never
   replaced. Without a SoundFont, `studio_score` stops and names the fix; it never plays silence.
-- **What it cannot do:** synth layers (noise risers, vinyl crackle, a sine drop) are not part of the score file; the
-  generated whoosh, pop and click come from `events` and cue `sfx`. The music ends with the video: `"length"` longer
+- **Toy sounds** (made from oscillators and noise, no SoundFont needed):
+  - a track `{"synth": "pizz", "notes": [...], "chords": [...]}` with the same positions, notes, chords, `rhythm`,
+    `octave`, `gain_db`, `pan` and `humanize` as a real track (no `program`, no bends). Toy instruments:
+    `pizz`, `bell`, `musicbox`, `whistle`, `pad`, `bass`, `stab`, `square` (`square` is the chiptune lead, `bass` stays dry);
+  - drums `{"kit": "toy", "grids": [...]}`; the toy kit plays `kick`, `kick2`, `snare`, `rim`, `clap`, `esnare`, `chh`, `phh`, `ohh`, `tom_lo`, `tom_mid`, `tom_hi`, `crash`, `splash`, `shaker`, `wood_hi`, `wood_lo`;
+  - hits `{"at": "cue:fall", "sound": "boing"}`: `boing`, `bonk`, `pop`, `squeak`, `splat`, `puff`, `slide_up`, `slide_down`, `tink`, `thud`, `nope`, `tweet`, `ring`, `thunder`
+    start on their time; `whoosh` and `shimmer` are centred on it; `riser` ends on it. A hit's `"pitch"` sets the tone of
+    `boing`, `pop`, `bonk`, the slides and `riser`.
+- **What it cannot do:** vinyl crackle and tape wobble are not in the score file; the generated whoosh, pop and click
+  of `events` and cue `sfx` still work beside it. The music ends with the video: `"length"` longer
   than the video is cut to it, and notes after the end are cut (the report counts them).
 
 ## Wordless films and scores

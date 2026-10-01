@@ -22,6 +22,7 @@ import numpy as np
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from score_file import ScoreError, compile_score, load_score, REVERBS  # noqa: E402
+import toys  # noqa: E402
 
 SR = 48000
 SYNTH_GAIN_DB = -8
@@ -233,7 +234,24 @@ def convolve(x, ir):
 # ---------------------------------------------------------------- the whole render
 def render(compiled, font_path, length_s, block=None, levels=None):
     """Stereo float32 at 48 kHz, length_s plus the tail. Raises ScoreError when a preset is missing from the font or a key
-    has no sound in it. `levels`, when given, receives each track's peak in dBFS (the hits as "hits")."""
+    has no sound in it. `levels`, when given, receives each track's peak in dBFS (the hits as "hits"). Toy sounds (toys.py)
+    are mixed in the same way; a score of toy sounds only needs no font (font_path None)."""
+    n = int(round((length_s + TAIL_S) * SR))
+    dry, wet, peaks = np.zeros((n, 2)), np.zeros((n, 2)), {}
+
+    def add(group, d, w):
+        nonlocal dry, wet
+        if compiled["reverb"] == "none":
+            d, w = d + w, np.zeros_like(w)
+        dry += d
+        wet += w
+        peak = float(np.abs(d + w).max())
+        peaks[group] = max(peaks.get(group, -200.0), round(20 * np.log10(max(peak, 1e-10)), 1))
+
+    for group, (d, w) in sorted(toys.render(compiled["toys"], n, compiled["seed"]).items()):
+        add(group, d, w)
+    if not compiled["notes"]:
+        return finish(compiled, dry, wet, peaks, levels)
     synth, sfid = load_synth(font_path)
     name = pathlib.Path(font_path).name
     problems = missing_presets(synth, sfid, compiled["programs"], name)
@@ -242,7 +260,6 @@ def render(compiled, font_path, length_s, block=None, levels=None):
     problems = silent_keys(synth, sfid, compiled, name)
     if problems:
         raise ScoreError(problems)
-    n = int(round((length_s + TAIL_S) * SR))
     bends = bend_events(compiled["controls"])
 
     def one_pass(notes):
@@ -252,20 +269,16 @@ def render(compiled, font_path, length_s, block=None, levels=None):
         return play(synth, bend_resets(notes, compiled["controls"]) + bends + note_events(notes, block), n).astype(np.float64)
 
     # one pass per track (and per hit gain), kicks and basses dry, the rest to the reverb; each scaled by its gain exactly
-    dry, wet, peaks = np.zeros((n, 2)), np.zeros((n, 2)), {}
     for key in sorted({(x[7], x[6]) for x in compiled["notes"]}):
-        part = np.zeros((n, 2))
+        parts = []
         for is_dry in (True, False):
             notes = [x for x in compiled["notes"] if (x[7], x[6]) == key and x[5] == is_dry]
-            if notes:
-                p = key[1] * one_pass(notes)
-                part += p
-                if is_dry or compiled["reverb"] == "none":
-                    dry += p
-                else:
-                    wet += p
-        peak = float(np.abs(part).max())
-        peaks[key[0]] = max(peaks.get(key[0], -200.0), round(20 * np.log10(max(peak, 1e-10)), 1))
+            parts.append(key[1] * one_pass(notes) if notes else np.zeros((n, 2)))
+        add(key[0], *parts)
+    return finish(compiled, dry, wet, peaks, levels)
+
+
+def finish(compiled, dry, wet, peaks, levels):
     if levels is not None:
         levels.update(peaks)
     if compiled["reverb"] == "none":
@@ -279,10 +292,10 @@ def render_project(proj, timing, total, soundfonts=None):
     proj = pathlib.Path(proj)
     began = time.time()
     compiled = compile_score(load_score(proj / "src" / "score.json"), timing)
-    font_id, font_path = find_font(soundfonts or default_soundfonts(), compiled["font"])
+    font_id, font_path = find_font(soundfonts or default_soundfonts(), compiled["font"]) if compiled["notes"] else ("none (toy sounds only)", None)
     heard = min(float(compiled["length"] or total), float(total))   # audio.py cuts the music at the end of the video
     length = heard                                                   # nothing is rendered past it (a long "length" filled a disk)
-    if not any(x[0] < heard for x in compiled["notes"]):
+    if not any(x[0] < heard for x in compiled["notes"]) and not any(e["start"] < heard for e in compiled["toys"]):
         raise ScoreError([f"no note of the score starts before {heard:.2f} s, the end of the music in this video: "
                           "anchor the bars earlier or write notes in the first bars (a silent score is never played)"])
     levels = {}
@@ -295,15 +308,16 @@ def render_project(proj, timing, total, soundfonts=None):
 
 
 def make_report(compiled, font_id, font_path, audio, length, seconds, levels):
-    late = [x for x in compiled["notes"] if x[0] > length]
+    late = [x for x in compiled["notes"] if x[0] > length] + [e for e in compiled["toys"] if e["start"] > length]
     peak = float(np.max(np.abs(audio))) if audio.size else 0.0
     loudest = max(levels.values()) if levels else 0.0
     buried = [f"{g} peaks at {v} dBFS, {loudest - v:.0f} dB under the loudest track: raise its \"gain_db\" or choose another "
               "program (this font plays it quietly)" for g, v in sorted(levels.items()) if loudest - v > BURIED_DB]
-    return {"font": font_id, "font_file": pathlib.Path(font_path).name, "bpm": compiled["bpm"],
+    return {"font": font_id, "font_file": pathlib.Path(font_path).name if font_path else "none", "bpm": compiled["bpm"],
             "bpm_solved": round(compiled["bpm_solved"], 4), "bar1_s": round(compiled["bar1_s"], 6),
             "anchors": [{**a, "off_samples": round((a["bar_s"] - a["target_s"]) * SR, 3)} for a in compiled["anchors"]],
-            "hits": compiled["hits"], "notes": len(compiled["notes"]), "channels": len(compiled["programs"]),
+            "hits": compiled["hits"], "notes": len(compiled["notes"]) + len(compiled["toys"]), "toy_sounds": len(compiled["toys"]),
+            "channels": len(compiled["programs"]),
             "pitched_tracks": compiled["pitched_tracks"],
             "raw_peak": round(peak, 4), "raw_peak_dbfs": round(20 * np.log10(max(peak, 1e-9)), 1),
             "length_s": round(length, 3), "render_s": round(seconds, 2), "reverb": compiled["reverb"],
@@ -348,7 +362,17 @@ def list_font(folder, wanted=None):
         lines.append(f"  not in this font: {', '.join(missing)}")
     if others:
         lines.append(f"  ({others} more kits in the font have no kit name in a score)")
-    return lines
+    return lines + toy_lines()
+
+
+def toy_lines():
+    """The toy sounds (toys.py), which need no font: for checking names like the font's own."""
+    from score_file import TOY_DRUMS
+    return ["toy sounds (no font needed):",
+            "  instruments (\"synth\"): " + ", ".join(toys.VOICES),
+            "  drums (\"kit\": \"toy\"): " + ", ".join(TOY_DRUMS),
+            "  hits (\"sound\"): " + ", ".join(f"{h} ({'centred on' if w == 'middle' else 'ends on' if w == 'end' else 'starts on'} its time)"
+                                          for h, (_, w) in toys.HITS.items())]
 
 
 def check_file(path):
