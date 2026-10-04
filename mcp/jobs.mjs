@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { paths, home, JOB_RUNNER, UserError, log } from "./context.mjs";
 import { pidIsAlive } from "../skills/synergy-studio/scripts/lib/lock.mjs";
 import { imageContent } from "./images.mjs";
+import { pruneJobs } from "./housekeeping.mjs";
 
 export const MAX_WAIT_SEC = 25;
 const POLL_MS = 250;
@@ -15,6 +16,8 @@ const STARTUP_GRACE_MS = 15000;
 const ID_RE = /^[a-z0-9-]{4,64}$/;
 const FINAL = new Set(["done", "failed"]);
 const MAX_IMAGES = 12;
+const PRUNE_EVERY_MS = 60 * 1000;
+let lastPrune = 0;
 
 export const newJobId = () => `${Date.now().toString(36)}-${crypto.randomBytes(3).toString("hex")}`;
 const jobFile = (id) => path.join(paths().jobs, `${id}.json`);
@@ -26,12 +29,25 @@ function checkId(id) {
   return id;
 }
 
+// Removes old finished jobs at most once a minute, so the jobs folder cannot grow without end.
+function pruneOldJobs(dir) {
+  if (Date.now() - lastPrune < PRUNE_EVERY_MS) return;
+  lastPrune = Date.now();
+  try {
+    const removed = pruneJobs(dir);
+    if (removed) log(`removed ${removed} old finished job(s) from ${dir}`);
+  } catch (error) {
+    log(`could not prune old jobs: ${error.message}`);
+  }
+}
+
 // Starts a job. spec: {label, node, args, cwd, env, id?, kind? ("studio" or "hyperframes"), heavy?, attach?, project?}
 // attach: {files: [absolute paths], globs: [{dir, pattern (RegExp source)}]}, pictures added to the result when fresh.
 export function startJob(spec) {
   const id = spec.id ?? newJobId();
   const jobs = paths().jobs;
   fs.mkdirSync(jobs, { recursive: true });
+  pruneOldJobs(jobs);
   const record = {
     id,
     label: spec.label,

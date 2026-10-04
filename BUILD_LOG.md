@@ -773,3 +773,25 @@ system is understood from the document rather than from memory, with the PDF bui
   (`studio_project_list`, `studio_file_list`, `studio_file_read`, `studio_compose`, `studio_synctest`, `studio_job_log`);
   they are now described.
 - AGENTS.md: read Part C before working on the code; every change updates the document in the same commit. README points to it.
+
+## L15: logs that clean up after themselves
+
+James reported that the server logs took a lot of storage. Measured on his computer: `<home>/jobs/` held 520 files
+(260 job records and 260 job logs, 4.2 MB) going back to the first day, because nothing ever removed a finished job
+unless it ended within a short wait; `server.log` had no size limit either.
+
+- `mcp/housekeeping.mjs` (new): `pruneJobs` removes finished jobs older than 7 days and all but the newest 100
+  finished jobs, stray logs without a record, and unfinished jobs older than 7 days whose runner is dead; a job whose
+  runner is alive is never removed. `rotateLog` renames `server.log` to `server.log.1` past 5 MB, replacing the older copy.
+- `mcp/jobs.mjs`: `startJob` prunes at most once a minute and logs how many jobs it removed. `mcp/context.mjs`: the log
+  writer checks the size on its first line and every 200 lines.
+- `test/housekeeping.test.mjs` (new, 5 tests): age limit, count limit (the 30 oldest of 130 go), a live running job
+  kept and a dead stale one removed, a missing folder, rotation keeping one old copy. Falsifier: before the module
+  existed the file failed to load (red), then all five passed.
+- End to end in a temporary tool home with 150 month old finished jobs and a 6 MB `server.log`: one real `startJob`
+  removed the 150 jobs, kept and finished the new one, and rotated the log to `server.log.1`.
+- Version 0.4.1 so installed plugins receive it. `docs/ARCHITECTURE.md` (B10, C2.3, C7, C8) and LITE.md updated.
+
+**Named gaps.** A single job's own log is not capped (the largest seen is 39 KB). The 520 existing files on James's
+computer go the first time a job starts after the update; deleting them by hand was blocked by the safety check.
+`lock.mjs` also appends to `server.log` but only rotates through the server's writer.

@@ -3,7 +3,7 @@
 **The architecture of the whole app, as built.** From a sentence typed to Claude to a finished, checked MP4: every
 tool, every step and every idea behind it, explained from the ground up, then described module by module.
 
-- **Status:** describes version 0.4.0 (lite L13). Keep it true: see C9 at the end.
+- **Status:** describes version 0.4.1 (lite L15). Keep it true: see C9 at the end.
 - **Readers:** Part A and Part B are written for someone comfortable with computers who has not met these tools
   (a college student); no term is used before it is explained. Part C is the developer reference: every module, every
   data format, every flow. Builders read C first and A and B when a concept is unclear.
@@ -491,7 +491,9 @@ draws a stretch of the video on one time axis (frames, words, voice, music and e
 detached, on the tool home's Node; the runner runs the CLI command, writing `jobs/<id>.json` and `jobs/<id>.log`; the
 tool answers at once with a `job_id`. Claude calls `studio_job_status` with `wait_sec: 25` until `done` or `failed`; the
 final answer holds the result text and contact sheets as images. Quick tools wait 20 s and become a job if the work runs
-longer. Records survive a server restart. Heavy work waits on `locks/heavy.lock`.
+longer. Records survive a server restart. Heavy work waits on `locks/heavy.lock`. Old jobs are cleared on their own:
+each time a job starts (at most once a minute) `housekeeping.mjs` removes finished jobs older than 7 days and all but
+the newest 100; a job whose runner is still alive is never removed.
 
 > **Why it matters: structured results.** Claude Code passes a tool's `structuredContent` to the model instead of its
 > text when both are present. Finished jobs once returned only `{job_id, state, exit_code}`, so the model saw "done" but
@@ -502,6 +504,7 @@ longer. Records survive a server restart. Heavy work waits on `locks/heavy.lock`
 `project.json`, `brief.md`, `shots.md`, `feedback.md`, `src/**` and subtitle files, so it can write the page and the score
 but never a script that runs: the tools only run the bundled code. Images return as JPEG, at most 1600 px wide and 1 MB.
 `server.log` has one line per call (tool, time, ok or the first line of the error), tagged with the process and the client.
+Past 5 MB it is renamed to `server.log.1` (replacing the older copy), so the logs never hold much more than 10 MB.
 
 ## Part B11. Footage, captions and the other tools
 
@@ -611,6 +614,7 @@ ledger/ reference/ dist/ tmp/   not committed: build evidence, reference videos,
 | `tools.mjs` | The 41 tools: descriptions, input schemas, handlers that run the CLI; job start and status; structured results with `message` |
 | `jobs.mjs` | Job records, waiting, progress text, images of a finished job |
 | `jobrunner.mjs` | The detached process that owns one job |
+| `housekeeping.mjs` | Keeps the tool home small: prunes finished jobs (7 days, newest 100 kept) and rotates `server.log` at 5 MB |
 | `files.mjs` | Project names, path safety, the file tools, export |
 | `content.mjs` | The guide, references (with the music skill), examples, resources, prompts |
 | `context.mjs` | Paths, version, the Node that runs jobs, logs |
@@ -682,6 +686,8 @@ hit moved 3 frames, a made-up command in the skill text). Gate tests T0 to T18 a
 - Videos are judged by measurements and by Claude reading stills, not by a person; nobody has yet listened to the scores.
 - Kokoro is English first, with ten voices.
 - Claude Desktop has no web access and no path for a video dragged into the chat.
+- Job files are kept 7 days (at most the newest 100); a log needed for a bug report should be copied before then.
+  A single job's own log is not capped.
 - The toy voices exist twice: `toys.py` and the standalone starter `template/score.py`.
 
 ## Part C8. History of the architecture
@@ -694,6 +700,7 @@ hit moved 3 frames, a made-up command in the skill text). Gate tests T0 to T18 a
 | L11 | Jobs on the tool home's Node, logs per client, delivery, voice and sound checks, `studio_inspect`, the cue sheet, self-correcting loudness, brand colour roles |
 | L12 | Real instruments: the score file, tinysoundfont, SoundFonts in setup and doctor, `studio_sounds`, the music skill, 48 kHz stereo score mixing, the bus compressor |
 | L13 | Toy sounds in the score file, the engine rule, structured results carrying `message`, this document |
+| L15 | Housekeeping: old job files pruned and `server.log` rotated, so logs no longer fill the disk |
 
 ## Part C9. Keeping this document true
 

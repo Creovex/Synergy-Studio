@@ -8,9 +8,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { toolHome, projectsHome, layout } from "../skills/synergy-studio/scripts/lib/paths.mjs";
 import { loadEnv, toolEnv } from "../skills/synergy-studio/scripts/lib/env.mjs";
+import { rotateLog } from "./housekeeping.mjs";
 
 export const SERVER_NAME = "synergy-studio";
-export const SERVER_VERSION = "0.4.0";
+export const SERVER_VERSION = "0.4.1";
 export const INSTRUCTIONS = [
   "Synergy Studio makes and improves short videos on this computer: narrated explainers and ads, talking head reels with word captions, photo or product ads cut to music, wordless animated stories and films, light 3D.",
   "Call studio_guide first in every conversation and follow it; it lists the references (studio_reference) and the examples (studio_example).",
@@ -77,6 +78,9 @@ export function expandHome(p) {
 }
 
 let logDirReady = false;
+// server.log is size checked on the first line and every ROTATE_CHECK_EVERY lines after it
+const ROTATE_CHECK_EVERY = 200;
+let linesSinceCheck = ROTATE_CHECK_EVERY;
 // every line names the server process and its client, so a Desktop chat, a Cowork task, a headless build and a test
 // run that share this log can be told apart
 let logClient = "";
@@ -92,6 +96,10 @@ export function log(...parts) {
     if (!logDirReady) {
       fs.mkdirSync(home(), { recursive: true });
       logDirReady = true;
+    }
+    if (++linesSinceCheck >= ROTATE_CHECK_EVERY) {
+      linesSinceCheck = 0;
+      rotateLog(paths().serverLog);
     }
     fs.appendFileSync(paths().serverLog, line);
   } catch {
