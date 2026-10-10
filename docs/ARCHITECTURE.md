@@ -3,7 +3,7 @@
 **The architecture of the whole app, as built.** From a sentence typed to Claude to a finished, checked MP4: every
 tool, every step and every idea behind it, explained from the ground up, then described module by module.
 
-- **Status:** describes version 0.4.1 (lite L15). Keep it true: see C9 at the end.
+- **Status:** describes version 0.4.2 (lite L16). Keep it true: see C9 at the end.
 - **Readers:** Part A and Part B are written for someone comfortable with computers who has not met these tools
   (a college student); no term is used before it is explained. Part C is the developer reference: every module, every
   data format, every flow. Builders read C first and A and B when a concept is unclear.
@@ -505,6 +505,9 @@ the newest 100; a job whose runner is still alive is never removed.
 but never a script that runs: the tools only run the bundled code. Images return as JPEG, at most 1600 px wide and 1 MB.
 `server.log` has one line per call (tool, time, ok or the first line of the error), tagged with the process and the client.
 Past 5 MB it is renamed to `server.log.1` (replacing the older copy), so the logs never hold much more than 10 MB.
+When the client goes away (stdin closed, or stdout or stderr closed with EPIPE) the server exits at once: an orphaned
+server once logged each EPIPE to the closed stderr, raised another, and rewrote `server.log` in a loop at full speed
+(`test/orphan-exit.test.mjs`).
 
 ## Part B11. Footage, captions and the other tools
 
@@ -701,6 +704,7 @@ hit moved 3 frames, a made-up command in the skill text). Gate tests T0 to T18 a
 | L12 | Real instruments: the score file, tinysoundfont, SoundFonts in setup and doctor, `studio_sounds`, the music skill, 48 kHz stereo score mixing, the bus compressor |
 | L13 | Toy sounds in the score file, the engine rule, structured results carrying `message`, this document |
 | L15 | Housekeeping: old job files pruned and `server.log` rotated, so logs no longer fill the disk |
+| L16 | The server exits when its client is gone, ending the EPIPE logging loop of orphaned servers |
 
 ## Part C9. Keeping this document true
 

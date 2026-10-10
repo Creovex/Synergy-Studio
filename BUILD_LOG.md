@@ -795,3 +795,19 @@ unless it ended within a short wait; `server.log` had no size limit either.
 **Named gaps.** A single job's own log is not capped (the largest seen is 39 KB). The 520 existing files on James's
 computer go the first time a job starts after the update; deleting them by hand was blocked by the safety check.
 `lock.mjs` also appends to `server.log` but only rotates through the server's writer.
+
+## L16: orphaned servers exit instead of looping
+
+James found the cause of the disk filling while Studio looked idle. A server whose client had gone (its stderr reader
+closed, stdin still open) raised EPIPE on its next log line; the uncaught exception handler logged that to stderr,
+which raised EPIPE again, and the loop rewrote `server.log` at full speed. Before L15 the file had no cap; after it the
+loop still ran, renaming the file every 200 lines and keeping the disk and Spotlight busy.
+
+- `mcp/server.mjs` (James's fix): an `error` on stdout or stderr, or an uncaught EPIPE, exits the process.
+- `test/orphan-exit.test.mjs` (James's test): closes the server's stdout and stderr, sends a message, and requires an
+  exit within 5 s with at most two EPIPE lines in the log. Falsifier: against the previous `server.mjs` it fails
+  ("server still running 5000 ms after its stderr closed"); with the fix it passes. Full node suite 274 of 274.
+- Version 0.4.2; `docs/ARCHITECTURE.md` (B10, C8) and LITE.md updated.
+
+**Named gaps.** Servers already running the earlier code keep it until their Claude session restarts. `lock.mjs` writes
+to `server.log` directly and has no stderr, so it cannot loop this way.

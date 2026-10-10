@@ -176,8 +176,15 @@ async function shutdown() {
   process.stdout.write("", () => process.exit(0));
 }
 
-process.stdout.on("error", () => process.exit(0));
-process.on("uncaughtException", (error) => log("uncaught exception:", error.stack ?? error.message));
+// a closed stdout or stderr means the client is gone. Exit: logging the EPIPE to stderr raises another one, and that
+// loop left orphaned servers rewriting server.log at full speed.
+const clientGone = () => process.exit(0);
+process.stdout.on("error", clientGone);
+process.stderr.on("error", clientGone);
+process.on("uncaughtException", (error) => {
+  if (error?.code === "EPIPE") clientGone();
+  log("uncaught exception:", error.stack ?? error.message);
+});
 process.on("unhandledRejection", (error) => log("unhandled rejection:", error?.stack ?? String(error)));
 
 let buffer = "";
